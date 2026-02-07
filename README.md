@@ -155,6 +155,20 @@ These are the engineering details worth discussing in depth. Each one is a self-
 
 ---
 
+## How I Built This
+
+The implementation follows a dependency chain -- each phase unblocks the next. For the full step-by-step breakdown with interview talking points for each step, see the [Build Guide](wiki/Build-Guide.md).
+
+1. **Foundation** -- Turborepo monorepo, shared game logic package with types and constants, Vitest test suite. Built first because both apps depend on it.
+2. **Server Core** -- Docker Compose for dev databases, Fastify server, Prisma schema, auth routes (register, login, JWT, OAuth). Built next because the mobile app needs auth endpoints.
+3. **Mobile Core** -- Expo app with dark theme, local game screen (validates shared logic without server), auth screens and Zustand store. Local game first to iterate on UI independently.
+4. **Real-Time Infrastructure** -- Socket.IO plugin with Redis adapter, auth middleware, lobby handler with room browser and chat. The foundation for all online features.
+5. **Room System + Online Game** -- Redis-backed room CRUD, ready/countdown flow, server-side move validation, game persistence to PostgreSQL, rematch with mark swap. The core multiplayer experience.
+6. **Polish** -- Chat components with rate limiting, spectator mode, game over modal, crypto donations, animations, haptics. Layered on after core gameplay works.
+7. **Infrastructure** -- Multi-stage Dockerfile, production Docker Compose (4 services), Terraform (EC2, SSM, IAM), Nginx (SSL, WebSocket proxy), GitHub Actions CI/CD with dynamic SSH.
+
+---
+
 ## What I'd Do Differently at Scale
 
 If this needed to handle 10K+ concurrent users, here is how the architecture would evolve. This section shows interviewers you understand the limits of your current design.

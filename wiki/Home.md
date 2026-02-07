@@ -13,6 +13,7 @@ This wiki is structured as interview prep for walking through the tic-tac-toe pr
 | [Database Schema](Database-Schema.md) | "Walk me through your data model", "Why this schema design?", "Why two databases?" |
 | [API Reference](API-Reference.md) | "How does your auth flow work?", "Why JWT over sessions?", "How do you handle OAuth securely?" |
 | [Deployment](Deployment.md) | "How do you deploy this?", "What's your CI/CD pipeline?", "How do you manage secrets?" |
+| [Build Guide](Build-Guide.md) | "How did you build this?", "What did you tackle first?", "Walk me through your implementation order" |
 
 ---
 
@@ -39,8 +40,9 @@ Memorize these. They cover the most common surface-level questions before an int
 - **Before a backend/API interview:** Read [Socket Events](Socket-Events.md) and [API Reference](API-Reference.md). Focus on the Q&A sections.
 - **Before a data modeling interview:** Read [Database Schema](Database-Schema.md). Be ready to draw the ER diagram on a whiteboard.
 - **Before a DevOps/infra interview:** Read [Deployment](Deployment.md). Know the CI/CD pipeline steps cold.
+- **Before a "how did you build this" question:** Read [Build Guide](Build-Guide.md). Know the 7 phases and why each depends on the previous.
 - **For any interview:** Review the Quick-Fire Talking Points above. These are your openers.
 
 ---
 
-**Navigation:** Home | [Architecture](Architecture.md) | [Socket Events](Socket-Events.md) | [Database Schema](Database-Schema.md) | [API Reference](API-Reference.md) | [Deployment](Deployment.md)
+**Navigation:** Home | [Architecture](Architecture.md) | [Socket Events](Socket-Events.md) | [Database Schema](Database-Schema.md) | [API Reference](API-Reference.md) | [Deployment](Deployment.md) | [Build Guide](Build-Guide.md)
