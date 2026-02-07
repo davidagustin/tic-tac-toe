@@ -1,6 +1,7 @@
-import { View, Text, Pressable } from 'react-native';
+import { View, Text, Pressable, ScrollView } from 'react-native';
 import { router } from 'expo-router';
 import { useAuthStore } from '../../stores/authStore';
+import { CryptoDonations } from '../../components/CryptoDonations';
 
 export default function LobbyScreen() {
   const { user, isGuest, logout } = useAuthStore();
@@ -11,7 +12,7 @@ export default function LobbyScreen() {
   };
 
   return (
-    <View className="flex-1 bg-bg-primary px-6 pt-16">
+    <ScrollView className="flex-1 bg-bg-primary" contentContainerClassName="px-6 pt-16 pb-12">
       <View className="flex-row justify-between items-center mb-8">
         <View>
           <Text className="text-text-secondary text-sm">
@@ -64,9 +65,11 @@ export default function LobbyScreen() {
         </Pressable>
       </View>
 
-      <Text className="text-text-muted text-center mt-8 text-sm">
+      <Text className="text-text-muted text-center mt-8 mb-8 text-sm">
         Online matchmaking & chat coming in Phase 2
       </Text>
-    </View>
+
+      <CryptoDonations />
+    </ScrollView>
   );
 }
