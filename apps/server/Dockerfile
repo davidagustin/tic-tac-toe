@@ -11,6 +11,9 @@ COPY turbo.json ./
 COPY apps/server/package.json ./apps/server/
 COPY packages/shared/package.json ./packages/shared/
 
+# Install OpenSSL for Prisma engine detection
+RUN apk add --no-cache openssl
+
 # Install dependencies
 RUN npm install
 
@@ -29,6 +32,9 @@ RUN npm run build
 FROM node:20-alpine AS runner
 
 WORKDIR /app
+
+# Install OpenSSL for Prisma runtime
+RUN apk add --no-cache openssl
 
 # Install only production deps
 COPY --from=builder /app/package.json /app/package-lock.json* ./
