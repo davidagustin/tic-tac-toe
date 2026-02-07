@@ -96,16 +96,46 @@ jobs:
           host: ${{ secrets.EC2_HOST }}
           username: ec2-user
           key: ${{ secrets.EC2_SSH_KEY }}
+          command_timeout: 10m
           script: |
             set -e
 
-            export ECR_URL=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/ttt-server
             export AWS_REGION=${{ secrets.AWS_REGION }}
             export ECR_REGISTRY=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com
             export IMAGE_TAG=${{ github.sha }}
 
             cd ~/app
-            ./scripts/deploy.sh
+
+            # Pull latest code (gets updated docker-compose, nginx.conf, etc.)
+            git pull origin main
+
+            # Fetch secrets from SSM into .env
+            bash apps/server/scripts/fetch-env.sh
+
+            # Login to ECR and pull pre-built images
+            aws ecr get-login-password --region "$AWS_REGION" | \
+              docker login --username AWS --password-stdin "$ECR_REGISTRY"
+            docker-compose -f docker-compose.prod.yml pull
+
+            # Restart services with new images
+            docker-compose -f docker-compose.prod.yml up -d --remove-orphans
+
+            # Run database migrations (wait for postgres health check)
+            sleep 10
+            docker exec ttt-app npx prisma migrate deploy
+
+            # Health check
+            sleep 5
+            if curl -skf https://localhost/api/health > /dev/null; then
+              echo "Deploy successful!"
+            else
+              echo "Health check failed!"
+              docker-compose -f docker-compose.prod.yml logs app --tail 30
+              exit 1
+            fi
+
+            # Cleanup old images
+            docker image prune -af 2>/dev/null || true
 
       - name: Revoke SSH for runner IP
         if: always()
