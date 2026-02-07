@@ -1,4 +1,5 @@
 import * as SecureStore from 'expo-secure-store';
+import { Platform } from 'react-native';
 import axios from 'axios';
 import { API_URL } from '../config/api';
 
@@ -7,22 +8,47 @@ const api = axios.create({
   timeout: 10000,
 });
 
-// ─── Token Storage ─────────────────────────────────
+// ─── Token Storage (platform-aware) ────────────────
+// expo-secure-store has no web implementation, so we
+// fall back to localStorage on web.
+
+async function setItem(key: string, value: string) {
+  if (Platform.OS === 'web') {
+    localStorage.setItem(key, value);
+  } else {
+    await SecureStore.setItemAsync(key, value);
+  }
+}
+
+async function getItem(key: string): Promise<string | null> {
+  if (Platform.OS === 'web') {
+    return localStorage.getItem(key);
+  }
+  return SecureStore.getItemAsync(key);
+}
+
+async function deleteItem(key: string) {
+  if (Platform.OS === 'web') {
+    localStorage.removeItem(key);
+  } else {
+    await SecureStore.deleteItemAsync(key);
+  }
+}
 
 export async function saveTokens(accessToken: string, refreshToken?: string) {
-  await SecureStore.setItemAsync('accessToken', accessToken);
+  await setItem('accessToken', accessToken);
   if (refreshToken) {
-    await SecureStore.setItemAsync('refreshToken', refreshToken);
+    await setItem('refreshToken', refreshToken);
   }
 }
 
 export async function getAccessToken(): Promise<string | null> {
-  return SecureStore.getItemAsync('accessToken');
+  return getItem('accessToken');
 }
 
 export async function clearTokens() {
-  await SecureStore.deleteItemAsync('accessToken');
-  await SecureStore.deleteItemAsync('refreshToken');
+  await deleteItem('accessToken');
+  await deleteItem('refreshToken');
 }
 
 // ─── API Interceptor (auto-refresh) ────────────────
@@ -44,7 +70,7 @@ api.interceptors.response.use(
       originalRequest._retry = true;
 
       try {
-        const refreshToken = await SecureStore.getItemAsync('refreshToken');
+        const refreshToken = await getItem('refreshToken');
         const { data } = await axios.post(`${API_URL}/api/auth/refresh`, {
           refreshToken,
         });
