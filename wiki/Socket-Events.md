@@ -1,220 +1,201 @@
-# Socket.IO Events Reference
-
-Complete reference for all Socket.IO events in the Tic-Tac-Toe Online application. All events are fully typed via `ClientToServerEvents` and `ServerToClientEvents` in `@ttt/shared`.
-
-## Connection
-
-**Path:** `/api/socket.io/`
-
-**Transports:** `websocket`, `polling`
-
-**Authentication:** Passed via `handshake.auth`:
-
-| Auth Type | Fields | Description |
-|-----------|--------|-------------|
-| JWT | `{ token: string }` | Authenticated user. Token verified server-side. |
-| Guest | `{ guestId: string, guestName: string }` | Guest user. No database lookup. |
+# Socket Events -- Interview Study Guide
 
 ---
 
-## Lobby Events
+## "How Does Your Real-Time System Work?"
 
-Events for the global lobby where players browse rooms and chat.
+This is the answer to give when an interviewer asks about your real-time architecture.
 
-### Client to Server
+When the mobile app authenticates (login, register, or guest mode), it creates a **Socket.IO** connection to the Fastify server at path `/api/socket.io/`. The connection handshake includes either a JWT token or guest credentials. Server-side **middleware** runs before the connection is accepted -- it verifies the JWT (or validates the guest ID format), loads the user's name and rating, and attaches this data to the socket object. If authentication fails, the connection is rejected before any events can be exchanged.
 
-| Event | Payload | Description |
-|-------|---------|-------------|
-| `lobby:join` | _(none)_ | Join the lobby. Server responds with room list, chat history, and online count. |
-| `lobby:leave` | _(none)_ | Leave the lobby. Decrements online count. |
-| `lobby:chat` | `{ text: string }` | Send a chat message to the lobby. Rate limited: 5 messages per 10 seconds. Max 200 characters. |
+Once connected, the client joins the **lobby** by emitting `lobby:join`. The server adds them to the `lobby` Socket.IO room, sends the current room list and chat history, and broadcasts an updated online count to all lobby members. Every lobby event -- room created, room updated, room deleted, chat message -- is broadcast to this room in real-time. The client's Zustand `lobbyStore` subscribes to these events and updates the UI reactively.
 
-### Server to Client
+When a player creates or joins a game room, they leave the lobby room and enter a room-specific Socket.IO room (e.g., `room:aB3dEf9x`). All room and game events are scoped to this room, so players in other rooms never receive irrelevant traffic. During gameplay, moves are sent as `game:move` events with just a position (0-8). The server validates the move using the same `@ttt/shared` game logic, applies it, and broadcasts the updated board to the room. This round-trip typically completes in **under 100ms**.
 
-| Event | Payload | Description |
-|-------|---------|-------------|
-| `lobby:rooms` | `RoomInfo[]` | Full list of active rooms. Sent on `lobby:join`. |
-| `lobby:room_added` | `RoomInfo` | A new room was created. |
-| `lobby:room_updated` | `RoomInfo` | A room's state changed (player joined, game started, etc.). |
-| `lobby:room_removed` | `string` (roomId) | A room was deleted (empty or expired). |
-| `lobby:chat` | `ChatMessage` | A new lobby chat message. |
-| `lobby:chat_history` | `ChatMessage[]` | Initial chat history (up to 50 messages). Sent on `lobby:join`. |
-| `lobby:online_count` | `number` | Updated count of online players. Broadcast when players join or leave. |
+For **multi-instance scaling**, the server uses Socket.IO's **Redis adapter**. All events pass through Redis pub/sub, so a player connected to server instance A receives events emitted by server instance B. This is already configured and working -- scaling horizontally is a deployment change, not a code change.
 
 ---
 
-## Room Events
+## Interview Q&A
 
-Events for individual game rooms.
+### Q: "What happens when a player disconnects mid-game?"
 
-### Client to Server
+Socket.IO uses a **ping/pong heartbeat** (25-second interval, 20-second timeout). When a client stops responding, the server fires a `disconnect` event after ~45 seconds. Here is what happens:
 
-| Event | Payload | Callback | Description |
-|-------|---------|----------|-------------|
-| `room:create` | `{ name: string, password?: string }` | `(response: { success: boolean, roomId?: string, error?: string }) => void` | Create a new room. **Guests cannot create rooms.** Name max 30 characters. Password is optional. |
-| `room:join` | `{ roomId: string, password?: string }` | `(response: { success: boolean, error?: string }) => void` | Join an existing room. Password required if room is protected. Joins as player (if slot open) or spectator. |
-| `room:leave` | _(none)_ | -- | Leave the current room. Triggers host transfer if needed. |
-| `room:ready` | _(none)_ | -- | Toggle ready status. When both players are ready, a 3-second countdown begins. |
-| `room:kick` | `{ userId: string }` | -- | Kick a player from the room. **Host only, pre-game only.** |
-| `room:chat` | `{ text: string }` | -- | Send a chat message to the room. Same rate limiting as lobby chat. |
+1. The player's `isConnected` flag is set to `false` in the Redis room state.
+2. A `room:player_left` event is broadcast to remaining members with the disconnected player's ID.
+3. If the disconnected player was the **host**, host role transfers to the next player. If no players remain, the first spectator is promoted.
+4. If the player **reconnects** within the window, their user-to-room mapping in Redis (`user:room:{userId}`) still exists. They rejoin the room and receive the current state.
+5. If the room empties completely, it is deleted from Redis and removed from the lobby room list.
 
-### Server to Client
-
-| Event | Payload | Description |
-|-------|---------|-------------|
-| `room:state` | `RoomDetail` | Full room state. Sent when joining a room. |
-| `room:player_joined` | `RoomMember` | A player or spectator joined the room. |
-| `room:player_left` | `{ userId: string, newHostId?: string }` | A member left. `newHostId` is set if host was transferred. |
-| `room:player_ready` | `{ userId: string, isReady: boolean }` | A player toggled their ready status. |
-| `room:countdown` | `number` (seconds) | Countdown tick. Values: 3, 2, 1. Emitted when both players are ready. |
-| `room:kicked` | `{ reason: string }` | You were kicked from the room by the host. |
-| `room:chat` | `ChatMessage` | A new room chat message. |
-| `room:chat_history` | `ChatMessage[]` | Initial room chat history (up to 50 messages). Sent on room join. |
+**Key talking point:** The reconnection is seamless because all state is in Redis, not in server memory. Even if the client reconnects to a different server instance, the state is the same.
 
 ---
 
-## Game Events
+### Q: "How do you prevent cheating?"
 
-Events for active gameplay within a room.
+The server is the **single source of truth**. Here is what happens on every `game:move` event:
 
-### Client to Server
+1. Load the game state from Redis.
+2. Verify the game status is `in_progress` (not already over).
+3. Verify it is the requesting player's turn (check `currentTurn` against the socket's user ID and assigned mark).
+4. Validate the cell is empty via `isValidMove(board, position)` from `@ttt/shared`.
+5. Apply the move via `applyMove()`, check for winner/draw.
+6. Save updated state to Redis, broadcast result to room.
 
-| Event | Payload | Description |
-|-------|---------|-------------|
-| `game:move` | `{ position: number }` | Make a move. Position is 0-8 (top-left to bottom-right). Server validates turn order and cell availability. |
-| `game:forfeit` | _(none)_ | Forfeit the current game. The forfeiting player loses. |
-| `game:rematch` | _(none)_ | Request or accept a rematch. When both players send this, a new game starts with swapped marks. |
+If **any** check fails, the server emits an `error` event back to the client with a specific code (`INVALID_MOVE`, `NOT_YOUR_TURN`, etc.) and the move is **not applied**. The client-side game logic is only for instant UI feedback -- the player sees their move immediately, but it is not confirmed until the server broadcasts `game:moved`.
 
-### Server to Client
-
-| Event | Payload | Description |
-|-------|---------|-------------|
-| `game:state` | `OnlineGameState` | Full game state. Sent when a game starts. |
-| `game:moved` | `{ position: number, player: Player, nextTurn: Player, board: Board }` | A move was applied. Contains the updated board and whose turn is next. |
-| `game:over` | `{ winner: Player \| null, reason: string, finalBoard: Board, winningCells: number[] \| null }` | Game ended. `winner` is `null` for draws. `winningCells` contains the 3 winning indices or `null`. |
-| `game:rematch_offered` | `{ userId: string }` | Your opponent wants a rematch. Send `game:rematch` to accept. |
-| `game:rematch_start` | `OnlineGameState` | Both players agreed. New game state with swapped marks. |
+**Why this matters:** The client is untrusted. Anyone could modify the app, intercept socket events, or send crafted payloads. Server validation is non-negotiable for any multiplayer game.
 
 ---
 
-## Error Events
+### Q: "How would you handle scaling to multiple server instances?"
 
-| Event | Payload | Description |
-|-------|---------|-------------|
-| `error` | `{ message: string, code: string }` | Server-side error. Codes include `INVALID_MOVE`, `NOT_YOUR_TURN`, etc. |
+This is already handled by the **Socket.IO Redis adapter**. Here is how it works:
+
+1. When server instance A emits an event to a room, the adapter publishes it to a Redis pub/sub channel.
+2. Server instance B, which is subscribed to the same channel, receives the event and delivers it to any clients connected to B that are in that room.
+3. This means a player on instance A and their opponent on instance B both receive the same events.
+
+The one requirement is **sticky sessions** on the load balancer. Socket.IO's initial connection uses HTTP long-polling before upgrading to WebSocket. The polling requests must hit the same server instance to complete the upgrade. An **ALB with cookie-based stickiness** or **Nginx with ip_hash** solves this.
+
+---
+
+### Q: "How does your chat rate limiting work?"
+
+I use a **sliding window counter** in Redis:
+
+1. On each chat message, the server runs `INCR` on `chat:rate:{userId}` and sets a **10-second TTL** on first increment.
+2. If the counter exceeds **5**, the message is rejected with a rate limit error.
+3. The key auto-expires after 10 seconds, resetting the window.
+
+This is simple, effective, and stateless from the server's perspective -- Redis handles the timing. The trade-off is it is not a true sliding window (it is a fixed window that resets on first message), but for chat it is more than sufficient.
+
+**At scale:** I would add rate limiting to **all** Socket.IO events, not just chat. Moves, room joins, and reconnects should all have per-user rate limits to prevent abuse.
+
+---
+
+### Q: "Why typed events? What does that give you?"
+
+All Socket.IO events are defined as TypeScript interfaces (`ClientToServerEvents` and `ServerToClientEvents`) in `@ttt/shared`. Both the server and mobile client import these types. This means:
+
+- **Compile-time safety**: If I rename an event or change a payload shape, TypeScript catches every call site that needs updating.
+- **No client/server disagreement**: The typed contract ensures both sides agree on event names and payload shapes.
+- **Self-documenting**: The types serve as the event API documentation.
+
+The trade-off is that runtime validation is still needed on the server (a malicious client can send anything). The types prevent accidental mistakes; Zod schemas prevent intentional ones.
+
+---
+
+### Q: "What is your reconnection strategy?"
+
+The client is configured for automatic reconnection:
+
+| Parameter | Value | Why |
+|-----------|-------|-----|
+| Max attempts | 10 | Prevents infinite retry loops on permanent failures |
+| Initial delay | 1 second | Fast first retry for transient disconnects |
+| Max delay | 5 seconds | Caps backoff to keep reconnection responsive |
+| Backoff | Exponential | Avoids thundering herd when many clients reconnect simultaneously |
+
+On reconnect, the client re-authenticates (token is in memory/secure storage) and re-joins its previous lobby or room. The server rebuilds the socket's state from Redis.
+
+---
+
+## Event Reference
+
+### Connection Flow
+
+| Direction | Event | Payload | Purpose |
+|-----------|-------|---------|---------|
+| Client sends | _(handshake)_ | `{ token }` or `{ guestId, guestName }` | Authenticate on connect |
+| Server sends | `error` | `{ message, code }` | Auth failure or runtime error |
+
+### Lobby Flow
+
+| Direction | Event | Payload | Purpose |
+|-----------|-------|---------|---------|
+| Client sends | `lobby:join` | _(none)_ | Enter lobby, receive state |
+| Client sends | `lobby:leave` | _(none)_ | Exit lobby |
+| Client sends | `lobby:chat` | `{ text }` | Send lobby message (rate limited) |
+| Server sends | `lobby:rooms` | `RoomInfo[]` | Full room list on join |
+| Server sends | `lobby:room_added` | `RoomInfo` | New room created |
+| Server sends | `lobby:room_updated` | `RoomInfo` | Room state changed |
+| Server sends | `lobby:room_removed` | `string` | Room deleted |
+| Server sends | `lobby:chat` | `ChatMessage` | New lobby message |
+| Server sends | `lobby:chat_history` | `ChatMessage[]` | Last 50 messages on join |
+| Server sends | `lobby:online_count` | `number` | Updated online count |
+
+### Room Flow
+
+| Direction | Event | Payload | Purpose |
+|-----------|-------|---------|---------|
+| Client sends | `room:create` | `{ name, password? }` | Create room (callback with roomId) |
+| Client sends | `room:join` | `{ roomId, password? }` | Join room (callback with success) |
+| Client sends | `room:leave` | _(none)_ | Leave room |
+| Client sends | `room:ready` | _(none)_ | Toggle ready status |
+| Client sends | `room:kick` | `{ userId }` | Kick member (host only, pre-game) |
+| Client sends | `room:chat` | `{ text }` | Send room message |
+| Server sends | `room:state` | `RoomDetail` | Full room state on join |
+| Server sends | `room:player_joined` | `RoomMember` | Member joined |
+| Server sends | `room:player_left` | `{ userId, newHostId? }` | Member left, optional host transfer |
+| Server sends | `room:player_ready` | `{ userId, isReady }` | Ready status changed |
+| Server sends | `room:countdown` | `number` | Countdown tick (3, 2, 1) |
+| Server sends | `room:kicked` | `{ reason }` | You were kicked |
+
+### Game Flow
+
+| Direction | Event | Payload | Purpose |
+|-----------|-------|---------|---------|
+| Client sends | `game:move` | `{ position }` | Make move (0-8) |
+| Client sends | `game:forfeit` | _(none)_ | Forfeit current game |
+| Client sends | `game:rematch` | _(none)_ | Request/accept rematch |
+| Server sends | `game:state` | `OnlineGameState` | Full game state on start |
+| Server sends | `game:moved` | `{ position, player, nextTurn, board }` | Move applied |
+| Server sends | `game:over` | `{ winner, reason, finalBoard, winningCells }` | Game ended |
+| Server sends | `game:rematch_offered` | `{ userId }` | Opponent wants rematch |
+| Server sends | `game:rematch_start` | `OnlineGameState` | Rematch starting, marks swapped |
 
 ---
 
 ## Type Definitions
 
-### `RoomInfo`
+These types are exported from `@ttt/shared` and used by both client and server. This is the **typed contract** that prevents client/server disagreement. If a payload shape changes in the shared package, both sides get compile errors until updated.
 
 ```typescript
-{
-  id: string;
-  name: string;
-  hostId: string;
-  hostName: string;
-  hasPassword: boolean;
-  playerCount: number;
-  spectatorCount: number;
-  maxPlayers: number;       // always 2
-  maxSpectators: number;    // always 8
-  status: "waiting" | "playing";
-  createdAt: string;
-}
-```
+// RoomInfo - what the lobby sees
+{ id, name, hostId, hostName, hasPassword, playerCount,
+  spectatorCount, maxPlayers, maxSpectators, status, createdAt }
 
-### `RoomDetail`
+// RoomDetail - what room members see
+{ id, name, hostId, hasPassword, status,
+  players: RoomMember[], spectators: RoomMember[], createdAt, expiresAt }
 
-```typescript
-{
-  id: string;
-  name: string;
-  hostId: string;
-  hasPassword: boolean;
-  status: "waiting" | "playing";
-  players: RoomMember[];
-  spectators: RoomMember[];
-  createdAt: string;
-  expiresAt: string;
-}
-```
+// RoomMember
+{ userId, name, rating, role, isReady, isConnected, mark? }
 
-### `RoomMember`
+// OnlineGameState
+{ roomId, board: (Player | null)[9], currentTurn, status,
+  playerX: RoomMember, playerO: RoomMember, moves: GameMove[], startedAt }
 
-```typescript
-{
-  userId: string;
-  name: string;
-  rating: number;
-  role: "player" | "spectator";
-  isReady: boolean;
-  isConnected: boolean;
-  mark?: "X" | "O";         // only set for players
-}
-```
+// GameMove
+{ player, position, moveNum, timestamp }
 
-### `OnlineGameState`
-
-```typescript
-{
-  roomId: string;
-  board: (Player | null)[];  // length 9
-  currentTurn: "X" | "O";
-  status: "waiting" | "in_progress" | "x_wins" | "o_wins" | "draw" | "abandoned";
-  playerX: RoomMember;
-  playerO: RoomMember;
-  moves: GameMove[];
-  startedAt: string;
-}
-```
-
-### `GameMove`
-
-```typescript
-{
-  player: "X" | "O";
-  position: number;          // 0-8
-  moveNum: number;
-  timestamp: string;
-}
-```
-
-### `ChatMessage`
-
-```typescript
-{
-  id: string;
-  userId: string;
-  userName: string;
-  text: string;
-  timestamp: string;
-  channel: "lobby" | "room";
-}
+// ChatMessage
+{ id, userId, userName, text, timestamp, channel }
 ```
 
 ---
 
-## Board Position Mapping
+## Key Talking Points Summary
 
-```
- 0 | 1 | 2
------------
- 3 | 4 | 5
------------
- 6 | 7 | 8
-```
-
----
-
-## Rate Limiting
-
-| Context | Limit | Window |
-|---------|-------|--------|
-| Chat (lobby + room) | 5 messages | 10 seconds |
-| Message length | 200 characters max | -- |
-| Chat history | 50 messages retained | 24-hour TTL |
+- **Auth before connection**: Socket middleware validates JWT/guest before any events fire.
+- **Rooms scope events**: Players only receive events for their room, not all traffic.
+- **Server is authority**: Client logic is for UX; server logic is for correctness.
+- **Typed contract**: Shared TypeScript interfaces prevent client/server event disagreement.
+- **Redis adapter**: Multi-instance ready without code changes.
+- **Reconnection is seamless**: State is in Redis, not server memory.
+- **Rate limiting in Redis**: Simple, stateless, auto-expiring counters.
 
 ---
 

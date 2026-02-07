@@ -1,214 +1,171 @@
-# Database Schema
-
-The application uses a dual-storage approach: **PostgreSQL** (via Prisma) for persistent data and **Redis** for ephemeral real-time state.
+# Database Schema -- Interview Study Guide
 
 ---
 
-## PostgreSQL Models (Prisma)
+## "Walk Me Through Your Data Model"
 
-Schema file: `apps/server/prisma/schema.prisma`
+This is the answer to give when an interviewer asks about your data design.
+
+I use a **dual-storage pattern**: Redis for ephemeral real-time state and PostgreSQL (via Prisma ORM) for persistent data. The key insight is that different data has different lifespans and access patterns, and forcing everything into one database creates unnecessary trade-offs.
+
+**Redis** holds everything that is temporary and latency-sensitive: active game rooms (2-hour TTL), in-progress game state, lobby and room chat (24-hour TTL), online presence, and rate-limiting counters. These are read and written on every socket event, often multiple times per second per room. Redis gives me sub-millisecond access, native TTL expiry (rooms auto-clean without a cron job), and the pub/sub backbone for Socket.IO's multi-instance adapter.
+
+**PostgreSQL** holds everything that must survive a server restart: user accounts (email, password hash, OAuth links), completed game records with full move history, user stats (wins, losses, draws, rating), and refresh token hashes. These are written infrequently -- only on registration, login, game completion, and token rotation -- but must be durable and queryable.
+
+**Guest-only games are not persisted.** If both players are guests, the game exists only in Redis and is discarded on completion. This avoids orphan records (no user ID to link to), respects guest privacy, and reduces unnecessary database writes.
+
+---
+
+## Schema Design Decisions
+
+### Q: "Why two databases instead of one?"
+
+Redis for ephemeral real-time state (rooms, active games, chat) gives me sub-millisecond reads and automatic expiry via TTLs. PostgreSQL for persistent data (users, completed games, stats) gives me ACID guarantees, relational integrity, and SQL for complex queries. Rooms have a 2-hour lifespan -- writing and deleting them in PostgreSQL would be wasteful I/O and create table bloat. A room might be read 100 times and written to 50 times during its life, then deleted. Redis handles this naturally; PostgreSQL would need periodic cleanup jobs.
+
+**Trade-off:** Two databases means two failure modes. If Redis goes down, all real-time features break even though auth and history still work. This could be mitigated with Redis Sentinel or Cluster for HA.
+
+**At scale:** I would use **ElastiCache** for managed Redis (automatic failover) and **RDS** for managed PostgreSQL (automated backups, multi-AZ).
+
+---
+
+### Q: "Why not persist guest games?"
+
+Guest users have no account -- their `userId` is a randomly generated string prefixed with `guest_`. Persisting their games would create orphan records with no real user to link to. If the same person plays as a guest twice, there is no way to associate the games. It also respects privacy -- guests have not opted into tracking. Finally, it reduces database writes. In a lobby with many casual players, most games might be guest-only.
+
+**Trade-off:** No game history or stats for guests. This is intentional -- it incentivizes account creation.
+
+---
+
+### Q: "How does refresh token rotation work in the schema?"
+
+The `RefreshToken` table stores **SHA-256 hashes**, not raw tokens. Here is the flow:
+
+1. On login/register, the server generates a random 64-byte token, hashes it with SHA-256, and stores the hash in the database.
+2. The raw token is sent to the client (in the response body and as an httpOnly cookie).
+3. When the client needs a new access token, it sends the raw refresh token.
+4. The server hashes the received token and looks up the hash in the database.
+5. If found, the old hash is **deleted** and a new token pair is generated (rotation).
+
+If an attacker steals a refresh token **after** the legitimate user has already used it to refresh, the stolen token's hash no longer exists in the database -- it is already invalid. If the attacker uses it **first**, the legitimate user's next refresh fails, which signals compromise.
+
+**Trade-off:** Each refresh requires a database write (delete old + insert new). At 15-minute access token lifetimes, this is roughly 4 writes per user per hour -- negligible.
+
+---
+
+### Q: "Why store full move history?"
+
+Each `Move` record is ~40 bytes (player mark, position 0-8, move number, timestamp). A tic-tac-toe game has at most 9 moves. Storing full history enables:
+
+- **Game replay**: Show a step-by-step playback of any completed game.
+- **Cheat detection**: Validate that the move sequence is legal (no skipped turns, no overwritten cells).
+- **Analytics**: Identify common opening moves, win rates by position, average game length.
+
+**Trade-off:** Slightly more storage than just storing the final board state. But at ~360 bytes per game maximum, it is negligible even at millions of games.
+
+---
+
+### Q: "Why CUID over UUID for primary keys?"
+
+CUIDs are **sortable by creation time** (the timestamp is embedded in the prefix), which means an `ORDER BY id` query returns records in chronological order -- useful for pagination without a separate `createdAt` index. They are collision-resistant (safe for distributed generation without coordination), shorter than UUIDv4, and are Prisma's default ID strategy.
+
+**Trade-off:** CUIDs are not a standard like UUID. If I needed to integrate with external systems that expect UUIDs, I would need to convert. For an internal-only primary key, CUIDs are the better choice.
+
+---
+
+### Q: "Why is `passwordHash` nullable on the User model?"
+
+OAuth-only users (Google sign-in) do not have a password. Making `passwordHash` nullable allows a user to exist with only an OAuth link. The login endpoint checks for this: if a user exists but has no password hash, the "invalid credentials" error is returned, directing them to use their OAuth provider instead.
+
+---
+
+## PostgreSQL Schema
 
 ### User
 
-| Column | Type | Constraints | Default | Description |
-|--------|------|-------------|---------|-------------|
-| `id` | `String` | `@id` | `cuid()` | Unique identifier |
-| `email` | `String` | `@unique` | -- | User email address |
-| `passwordHash` | `String?` | -- | -- | bcrypt hash. `null` for OAuth-only users |
-| `name` | `String` | `@unique` | -- | Display name / screen name |
-| `avatarUrl` | `String?` | -- | -- | Profile picture URL |
-| `rating` | `Int` | -- | `1000` | ELO-like rating |
-| `gamesPlayed` | `Int` | -- | `0` | Total games completed |
-| `wins` | `Int` | -- | `0` | Total wins |
-| `losses` | `Int` | -- | `0` | Total losses |
-| `draws` | `Int` | -- | `0` | Total draws |
-| `createdAt` | `DateTime` | -- | `now()` | Account creation timestamp |
-| `updatedAt` | `DateTime` | `@updatedAt` | -- | Last update timestamp |
+| Column | Type | Key/Constraint | Default |
+|--------|------|----------------|---------|
+| `id` | String | PK | `cuid()` |
+| `email` | String | Unique | -- |
+| `passwordHash` | String? | -- | -- |
+| `name` | String | Unique | -- |
+| `avatarUrl` | String? | -- | -- |
+| `rating` | Int | Indexed | `1000` |
+| `gamesPlayed` | Int | -- | `0` |
+| `wins` | Int | -- | `0` |
+| `losses` | Int | -- | `0` |
+| `draws` | Int | -- | `0` |
+| `createdAt` | DateTime | -- | `now()` |
+| `updatedAt` | DateTime | -- | auto |
 
-**Indexes:** `rating`
+### Account (OAuth)
 
-**Relations:**
-- `accounts` -> `Account[]` (OAuth providers)
-- `gamesAsX` -> `Game[]` (games played as X)
-- `gamesAsO` -> `Game[]` (games played as O)
-- `wonGames` -> `Game[]` (games won)
-- `refreshTokens` -> `RefreshToken[]`
+| Column | Type | Key/Constraint | Default |
+|--------|------|----------------|---------|
+| `id` | String | PK | `cuid()` |
+| `userId` | String | FK -> User, Indexed | -- |
+| `provider` | String | Unique with providerAccountId | -- |
+| `providerAccountId` | String | Unique with provider | -- |
 
----
-
-### Account
-
-Stores OAuth provider links for a user.
-
-| Column | Type | Constraints | Default | Description |
-|--------|------|-------------|---------|-------------|
-| `id` | `String` | `@id` | `cuid()` | Unique identifier |
-| `userId` | `String` | `FK -> User.id` | -- | Owning user |
-| `provider` | `String` | -- | -- | OAuth provider (`"google"`, `"github"`) |
-| `providerAccountId` | `String` | -- | -- | Provider-specific user ID |
-
-**Unique:** `[provider, providerAccountId]`
-
-**Indexes:** `userId`
-
-**On Delete:** Cascade (deleted when user is deleted)
-
----
+On delete: Cascade (deleted with user).
 
 ### RefreshToken
 
-Stores hashed refresh tokens for JWT rotation.
+| Column | Type | Key/Constraint | Default |
+|--------|------|----------------|---------|
+| `id` | String | PK | `cuid()` |
+| `token` | String | Unique | -- |
+| `userId` | String | FK -> User, Indexed | -- |
+| `expiresAt` | DateTime | -- | -- |
+| `createdAt` | DateTime | -- | `now()` |
 
-| Column | Type | Constraints | Default | Description |
-|--------|------|-------------|---------|-------------|
-| `id` | `String` | `@id` | `cuid()` | Unique identifier |
-| `token` | `String` | `@unique` | -- | SHA-256 hash of the actual token |
-| `userId` | `String` | `FK -> User.id` | -- | Token owner |
-| `expiresAt` | `DateTime` | -- | -- | Expiration timestamp (7 days from creation) |
-| `createdAt` | `DateTime` | -- | `now()` | Creation timestamp |
-
-**Indexes:** `userId`
-
-**On Delete:** Cascade (deleted when user is deleted)
-
-**Token Flow:**
-1. Server generates 64-byte random token, hashes with SHA-256, stores hash in DB
-2. Raw token sent to client (in response body + httpOnly cookie)
-3. On refresh, client sends raw token; server hashes and looks up
-4. Old token is revoked (deleted), new token created (rotation)
-
----
+On delete: Cascade. Token column stores SHA-256 hash, not raw token.
 
 ### Game
 
-Records completed games for history and stats.
-
-| Column | Type | Constraints | Default | Description |
-|--------|------|-------------|---------|-------------|
-| `id` | `String` | `@id` | `cuid()` | Unique identifier |
-| `playerXId` | `String` | `FK -> User.id` | -- | Player X user ID |
-| `playerOId` | `String?` | `FK -> User.id` | -- | Player O user ID. `null` until opponent joins. |
-| `winnerId` | `String?` | `FK -> User.id` | -- | Winner user ID. `null` for draws. |
-| `roomId` | `String?` | -- | -- | Socket.IO room ID for tracing |
-| `status` | `GameStatus` | -- | `WAITING` | Game result |
-| `startedAt` | `DateTime` | -- | `now()` | Game start timestamp |
-| `endedAt` | `DateTime?` | -- | -- | Game end timestamp |
-
-**Indexes:** `playerXId`, `playerOId`, `startedAt`, `roomId`
-
-**Relations:**
-- `playerX` -> `User` (relation "PlayerX")
-- `playerO` -> `User?` (relation "PlayerO")
-- `winner` -> `User?` (relation "Winner")
-- `moves` -> `Move[]`
-
-**Note:** Guest-only games (both players are guests) are NOT persisted to the database.
-
----
+| Column | Type | Key/Constraint | Default |
+|--------|------|----------------|---------|
+| `id` | String | PK | `cuid()` |
+| `playerXId` | String | FK -> User, Indexed | -- |
+| `playerOId` | String? | FK -> User, Indexed | -- |
+| `winnerId` | String? | FK -> User | -- |
+| `roomId` | String? | Indexed | -- |
+| `status` | GameStatus | -- | `WAITING` |
+| `startedAt` | DateTime | Indexed | `now()` |
+| `endedAt` | DateTime? | -- | -- |
 
 ### Move
 
-Records individual moves within a game.
+| Column | Type | Key/Constraint | Default |
+|--------|------|----------------|---------|
+| `id` | String | PK | `cuid()` |
+| `gameId` | String | FK -> Game, Indexed | -- |
+| `player` | PlayerMark | -- | -- |
+| `position` | Int | -- | -- |
+| `moveNum` | Int | Compound index [gameId, moveNum] | -- |
+| `createdAt` | DateTime | -- | `now()` |
 
-| Column | Type | Constraints | Default | Description |
-|--------|------|-------------|---------|-------------|
-| `id` | `String` | `@id` | `cuid()` | Unique identifier |
-| `gameId` | `String` | `FK -> Game.id` | -- | Parent game |
-| `player` | `PlayerMark` | -- | -- | `X` or `O` |
-| `position` | `Int` | -- | -- | Board position (0-8) |
-| `moveNum` | `Int` | -- | -- | Sequential move number |
-| `createdAt` | `DateTime` | -- | `now()` | Move timestamp |
-
-**Indexes:** `gameId`, `[gameId, moveNum]`
-
-**On Delete:** Cascade (deleted when game is deleted)
-
----
+On delete: Cascade (deleted with game).
 
 ### Enums
 
-#### GameStatus
+**GameStatus:** `WAITING`, `IN_PROGRESS`, `X_WINS`, `O_WINS`, `DRAW`, `ABANDONED`
 
-| Value | DB Mapping | Description |
-|-------|-----------|-------------|
-| `WAITING` | `waiting` | Waiting for opponent |
-| `IN_PROGRESS` | `in_progress` | Game actively being played |
-| `X_WINS` | `x_wins` | Player X won |
-| `O_WINS` | `o_wins` | Player O won |
-| `DRAW` | `draw` | Game ended in draw |
-| `ABANDONED` | `abandoned` | Game abandoned (disconnect, etc.) |
-
-#### PlayerMark
-
-| Value | Description |
-|-------|-------------|
-| `X` | Player X |
-| `O` | Player O |
+**PlayerMark:** `X`, `O`
 
 ---
 
 ## Redis Data Structures
 
-Redis key prefixes are defined in `packages/shared/src/constants.ts` as `REDIS_KEYS`.
-
-### Room Data
-
-| Key | Type | TTL | Value |
-|-----|------|-----|-------|
-| `room:{roomId}` | String (JSON) | 2 hours | `RoomDetail` + `passwordHash` (bcrypt hash of room password, if set) |
-| `rooms` | Set | -- | Set of active room IDs |
-| `user:room:{userId}` | String | 2 hours | Room ID the user is currently in |
-
-**Room JSON structure:**
-```json
-{
-  "id": "aB3dEf9x",
-  "name": "My Room",
-  "hostId": "clx...",
-  "hasPassword": false,
-  "status": "waiting",
-  "players": [
-    {
-      "userId": "clx...",
-      "name": "Alice",
-      "rating": 1200,
-      "role": "player",
-      "isReady": false,
-      "isConnected": true,
-      "mark": "X"
-    }
-  ],
-  "spectators": [],
-  "createdAt": "2025-01-15T10:00:00.000Z",
-  "expiresAt": "2025-01-15T12:00:00.000Z",
-  "passwordHash": null
-}
-```
-
-### Game State
-
-| Key | Type | TTL | Value |
-|-----|------|-----|-------|
-| `game:state:{roomId}` | String (JSON) | 2 hours | `OnlineGameState` (board, turns, players, moves) |
-
-### Chat
-
-| Key | Type | TTL | Value |
-|-----|------|-----|-------|
-| `lobby:chat` | List | 24 hours | JSON-serialized `ChatMessage` objects. Trimmed to last 50. |
-| `room:chat:{roomId}` | List | 24 hours | JSON-serialized `ChatMessage` objects. Trimmed to last 50. |
-
-### Presence
-
-| Key | Type | TTL | Value |
-|-----|------|-----|-------|
-| `lobby:online` | Set | -- | User IDs of players currently in the lobby |
-
-### Rate Limiting
-
-| Key | Type | TTL | Value |
-|-----|------|-----|-------|
-| `chat:rate:{userId}` | String (counter) | 10 seconds | Number of messages sent in current window. Limit: 5. |
+| Key Pattern | Redis Type | TTL | Why This Type |
+|-------------|-----------|-----|---------------|
+| `room:{roomId}` | String (JSON) | 2 hours | Single atomic read/write for full room state |
+| `rooms` | Set | -- | O(1) membership checks, O(N) listing -- perfect for "is room active?" + "list all rooms" |
+| `user:room:{userId}` | String | 2 hours | Simple key-value lookup: "which room is this user in?" |
+| `game:state:{roomId}` | String (JSON) | 2 hours | Same reasoning as room -- atomic read/write of full game state |
+| `lobby:chat` | List | 24 hours | Ordered by insertion time, LPUSH + LTRIM keeps last 50 |
+| `room:chat:{roomId}` | List | 24 hours | Same as lobby chat, scoped to room |
+| `lobby:online` | Set | -- | O(1) add/remove, SCARD for count -- no duplicates |
+| `chat:rate:{userId}` | String (counter) | 10 seconds | INCR is atomic, TTL auto-resets the window |
 
 ---
 
@@ -224,16 +181,27 @@ User
 
 Game
   |-- 1:N --> Move
-
-Account
-  |-- N:1 --> User
-
-RefreshToken
-  |-- N:1 --> User
-
-Move
-  |-- N:1 --> Game
 ```
+
+**Key talking point:** The three separate Game relations on User (playerX, playerO, winner) allow efficient queries: "Show me all games where I played X", "Show me all my wins", etc. Prisma handles the relation naming to avoid ambiguity.
+
+---
+
+## At Scale
+
+| Current | At Scale |
+|---------|----------|
+| Single PostgreSQL in Docker | **RDS Multi-AZ** with automated backups and point-in-time recovery |
+| Single Redis in Docker | **Redis Cluster** (3+ shards) or **ElastiCache** for HA |
+| All games in one table | **Partition the Game table by date** -- archive games older than 90 days to cold storage (S3 + Athena for analytics) |
+| Stats on User model | **Materialized view or separate stats table** -- avoids row-level locks on User during concurrent game completions |
+| No read replicas | **Read replicas** for leaderboard and stats queries, write to primary only |
+| CUIDs for all IDs | Still fine -- but consider **ULIDs** if cross-system interop becomes important |
+| No caching layer | **Redis cache** (or a separate cache cluster) for hot queries like leaderboard top 100 |
+
+### Key Talking Point
+
+The dual-storage pattern means I already have the right tool for each job. Scaling is about making each tool more resilient (managed services, replication, clustering), not about changing the fundamental data architecture.
 
 ---
 

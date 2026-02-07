@@ -1,313 +1,122 @@
-# REST API Reference
-
-All REST endpoints are served by the Fastify 5 server. Base path: `/api`. Input validation uses Zod schemas. All responses follow the `ApiResponse<T>` shape.
-
-## Response Format
-
-```typescript
-{
-  success: boolean;
-  data?: T;
-  error?: string;
-  details?: object;  // field-level validation errors (on 400)
-}
-```
+# API Reference -- Interview Study Guide
 
 ---
 
-## Health Check
+## "How Does Your Auth Flow Work?"
 
-### `GET /api/health`
+This is the answer to give when an interviewer asks about authentication.
 
-Check server and database connectivity.
+A user registers by sending their email, password, and display name to `POST /api/auth/register`. The server validates the input with a **Zod schema**, hashes the password with **bcrypt** (12 rounds), and creates the user in PostgreSQL. It then generates a **JWT access token** (15-minute expiry, contains userId and email) and a **refresh token** (random 64 bytes, hashed with SHA-256 and stored in the database with a 7-day expiry). Both tokens are returned in the response body, and the refresh token is also set as an **httpOnly cookie** for automatic inclusion in subsequent requests.
 
-**Authentication:** None
+The client stores the access token in **expo-secure-store** (encrypted on-device storage) and uses it for two things: the `Authorization: Bearer` header on REST requests, and the `handshake.auth.token` field when establishing a Socket.IO connection. The server validates the JWT on every REST request (via Fastify's `onRequest` hook) and on every Socket.IO connection (via middleware).
 
-**Response:**
+When the access token expires after 15 minutes, the client sends the refresh token to `POST /api/auth/refresh`. The server hashes the received token, looks it up in the database, **deletes the old hash** (revocation), generates a new token pair, and returns them. This is **refresh token rotation** -- each refresh token can only be used once, which limits the damage if one is stolen.
 
-| Status | Body | Condition |
-|--------|------|-----------|
-| `200` | `{ "status": "ok" }` | Database is reachable |
-| `503` | `{ "status": "error", "message": "Database connection failed" }` | Database query failed |
+For **Google OAuth**, the flow adds a layer: the client opens a browser to `GET /api/auth/google`, which redirects to Google's consent screen with a **CSRF state parameter** (random 32 bytes, 5-minute TTL stored in Redis). Google calls back with an authorization code, the server exchanges it for user info, creates or links the account, generates a **temporary auth code** (60-second TTL), and redirects the mobile app via deep link. The app exchanges this code for JWT tokens via `POST /api/auth/oauth/exchange`.
 
 ---
 
-## Authentication
+## Auth Design Decisions
 
-All auth endpoints are rate-limited to **5 requests per minute** per client.
+### Q: "Why JWT over sessions?"
 
-### `POST /api/auth/register`
+I chose JWTs because they are **stateless** -- no server-side session store is needed. This matters for two reasons: (1) it works naturally with Socket.IO, where the token is passed once in the handshake rather than requiring a session lookup on every event, and (2) it simplifies horizontal scaling because any server instance can validate the token independently.
 
-Create a new user account.
+**Trade-off:** You cannot immediately revoke an access token. If a user's account is compromised, the attacker has access until the token expires. I mitigate this with a **short 15-minute lifetime** -- the blast radius of a stolen access token is small.
 
-**Authentication:** None
+**At scale:** I would add a **Redis-backed token blacklist** for immediate revocation (check the blacklist on each request, with the blacklist entry TTL matching the token's remaining lifetime). This adds a Redis lookup per request but gives instant revocation capability.
 
-**Request Body:**
+---
 
-| Field | Type | Constraints | Description |
-|-------|------|-------------|-------------|
-| `email` | `string` | Valid email format | User email (stored lowercase) |
-| `password` | `string` | 8-128 characters | Plain text password (hashed with bcrypt, 12 rounds) |
-| `name` | `string` | 1-50 characters | Display name (must be unique, case-insensitive) |
+### Q: "Why bcrypt over Argon2?"
 
-**Success Response (`201`):**
+bcrypt is battle-tested (25+ years), has excellent library support (`bcryptjs` is pure JavaScript with no native compilation dependencies), and 12 rounds provides ~250ms hash time -- sufficient to make brute-force attacks impractical. Argon2 is theoretically stronger (memory-hard, resistant to GPU attacks), but it requires native C bindings, which complicates Docker builds and cross-platform compatibility.
+
+**Trade-off:** bcrypt is not memory-hard, so it is more vulnerable to GPU-based attacks than Argon2. For a tic-tac-toe game, this threat model is not realistic. For a banking app, I would choose Argon2.
+
+**At scale:** Still bcrypt. The library choice does not change with scale -- what changes is adding **rate limiting on login attempts** (already in place: 5 requests/minute per client) and **account lockout after N failures**.
+
+---
+
+### Q: "How do you handle OAuth securely?"
+
+Three protections:
+
+1. **CSRF state parameter**: A random 32-byte string is generated, stored in Redis with a 5-minute TTL, and included in the OAuth redirect URL. When Google calls back, the server verifies the state matches. This prevents an attacker from tricking a user into linking the attacker's Google account.
+
+2. **Temporary auth code**: After OAuth completes, the server does not return JWTs in the redirect URL (which could be intercepted). Instead, it generates a short-lived code (60-second TTL in Redis) and redirects with just that code. The client exchanges it for tokens via a separate POST request.
+
+3. **Server-side token exchange**: The authorization code from Google is exchanged for Google tokens on the server, never on the client. The client never sees Google's access token.
+
+**Trade-off:** The two-step exchange (redirect with code, then POST for tokens) adds a round-trip. This is a security-for-latency trade-off that is standard practice.
+
+**At scale:** I would add **PKCE** (Proof Key for Code Exchange) for the mobile client, which prevents authorization code interception even if the redirect is compromised.
+
+---
+
+### Q: "What happens if someone steals a refresh token?"
+
+Refresh tokens are **rotated on each use**. When a legitimate user refreshes, the old token's hash is deleted from the database and a new one is created. If an attacker stole the token:
+
+- **Attacker uses it first:** They get new tokens. When the legitimate user tries to refresh, their token is invalid (already rotated). This signals compromise -- the user must re-authenticate.
+- **Legitimate user uses it first:** The attacker's stolen token is invalid (already rotated). The attack fails silently.
+
+In both cases, the damage is limited. The attacker gets at most one token pair (15-minute access + one refresh). A more sophisticated system would detect the reuse of a rotated token and revoke **all** of that user's refresh tokens (token family revocation).
+
+---
+
+### Q: "Why httpOnly cookies for refresh tokens?"
+
+An httpOnly cookie **cannot be read by JavaScript** (no `document.cookie` access). This protects against XSS attacks -- even if an attacker injects script into the page, they cannot steal the refresh token. The cookie is also scoped to the `/api/auth` path and marked `secure` in production (HTTPS only).
+
+**Trade-off:** Cookies are sent automatically on every request to the matching path, which means CSRF protection is needed. For the refresh endpoint, this is mitigated by also accepting the token in the request body (the mobile client sends it explicitly, not via cookie).
+
+---
+
+## Endpoint Reference
+
+### Health
+
+| Method | Path | Auth | Purpose |
+|--------|------|------|---------|
+| GET | `/api/health` | None | Returns `200` if database is reachable, `503` if not |
+
+### Authentication
+
+| Method | Path | Auth | Purpose |
+|--------|------|------|---------|
+| POST | `/api/auth/register` | None | Create account. Returns tokens + user profile. |
+| POST | `/api/auth/login` | None | Authenticate with email/password. Returns tokens + user. |
+| POST | `/api/auth/refresh` | Refresh token (body or cookie) | Rotate refresh token, get new access token. |
+| POST | `/api/auth/logout` | Refresh token cookie | Revoke refresh token, clear cookie. |
+| GET | `/api/auth/me` | JWT Bearer | Get current user profile and stats. |
+
+### OAuth (Google)
+
+| Method | Path | Auth | Purpose |
+|--------|------|------|---------|
+| GET | `/api/auth/google` | None | Redirect to Google consent screen with CSRF state. |
+| GET | `/api/auth/google/callback` | None (from Google) | Handle callback, create/link user, redirect with temp code. |
+| POST | `/api/auth/oauth/exchange` | None | Exchange temp auth code for JWT tokens. |
+
+### Input Validation
+
+All endpoints validate input with **Zod schemas**. Invalid input returns `400` with field-level error details:
 
 ```json
 {
-  "success": true,
-  "data": {
-    "accessToken": "eyJhbG...",
-    "refreshToken": "a1b2c3...",
-    "user": {
-      "id": "clx...",
-      "email": "user@example.com",
-      "name": "Alice",
-      "rating": 1000,
-      "avatarUrl": null,
-      "stats": {
-        "gamesPlayed": 0,
-        "wins": 0,
-        "losses": 0,
-        "draws": 0
-      }
-    }
+  "success": false,
+  "error": "Invalid input",
+  "details": {
+    "email": "Invalid email format",
+    "password": "Must be at least 8 characters"
   }
 }
 ```
 
-**Also sets:** `refreshToken` as an httpOnly cookie (path: `/api/auth`, max-age: 7 days, secure in production).
+### Rate Limiting
 
-**Error Responses:**
-
-| Status | Error | Condition |
-|--------|-------|-----------|
-| `400` | `"Invalid input"` | Zod validation failed (details in `details` field) |
-| `409` | `"An account with this email already exists"` | Email already registered |
-| `409` | `"Screen name is already taken"` | Display name taken (case-insensitive) |
-
----
-
-### `POST /api/auth/login`
-
-Authenticate with email and password.
-
-**Authentication:** None
-
-**Request Body:**
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `email` | `string` | User email |
-| `password` | `string` | Plain text password |
-
-**Success Response (`200`):**
-
-```json
-{
-  "success": true,
-  "data": {
-    "accessToken": "eyJhbG...",
-    "refreshToken": "a1b2c3...",
-    "user": {
-      "id": "clx...",
-      "email": "user@example.com",
-      "name": "Alice",
-      "rating": 1200,
-      "avatarUrl": null,
-      "stats": {
-        "gamesPlayed": 15,
-        "wins": 8,
-        "losses": 5,
-        "draws": 2
-      }
-    }
-  }
-}
-```
-
-**Also sets:** `refreshToken` httpOnly cookie.
-
-**Error Responses:**
-
-| Status | Error | Condition |
-|--------|-------|-----------|
-| `400` | `"Invalid input"` | Zod validation failed |
-| `401` | `"Invalid email or password"` | Email not found, no password hash (OAuth-only), or wrong password |
-
----
-
-### `POST /api/auth/refresh`
-
-Rotate the refresh token and get a new access token.
-
-**Authentication:** None (uses refresh token)
-
-**Request Body (or Cookie):**
-
-The refresh token can be provided in either:
-- The request body: `{ "refreshToken": "a1b2c3..." }`
-- The `refreshToken` httpOnly cookie (set by login/register)
-
-**Success Response (`200`):**
-
-```json
-{
-  "success": true,
-  "data": {
-    "accessToken": "eyJhbG...",
-    "refreshToken": "d4e5f6..."
-  }
-}
-```
-
-**Token Rotation:** The old refresh token is revoked (deleted from DB) and a new one is issued. This prevents token reuse.
-
-**Also sets:** New `refreshToken` httpOnly cookie.
-
-**Error Responses:**
-
-| Status | Error | Condition |
-|--------|-------|-----------|
-| `401` | `"No refresh token"` | Neither body nor cookie contained a token |
-| `401` | `"Invalid or expired refresh token"` | Token not found in DB or expired |
-
----
-
-### `POST /api/auth/logout`
-
-Invalidate the current refresh token and clear the cookie.
-
-**Authentication:** None (uses refresh token cookie)
-
-**Success Response (`200`):**
-
-```json
-{
-  "success": true
-}
-```
-
-Clears the `refreshToken` cookie and deletes the token hash from the database.
-
----
-
-### `GET /api/auth/me`
-
-Get the current authenticated user's profile.
-
-**Authentication:** Required (JWT Bearer token)
-
-**Headers:**
-
-```
-Authorization: Bearer <accessToken>
-```
-
-**Success Response (`200`):**
-
-```json
-{
-  "success": true,
-  "data": {
-    "id": "clx...",
-    "email": "user@example.com",
-    "name": "Alice",
-    "rating": 1200,
-    "avatarUrl": "https://...",
-    "stats": {
-      "gamesPlayed": 15,
-      "wins": 8,
-      "losses": 5,
-      "draws": 2
-    }
-  }
-}
-```
-
-**Error Responses:**
-
-| Status | Error | Condition |
-|--------|-------|-----------|
-| `401` | Unauthorized | Missing or invalid JWT |
-| `404` | `"User not found"` | User ID from token not in database |
-
----
-
-## OAuth
-
-### `GET /api/auth/google`
-
-Initiate Google OAuth flow. Redirects the user to Google's consent screen.
-
-**Authentication:** None
-
-**Query Parameters:**
-
-| Param | Type | Description |
-|-------|------|-------------|
-| `platform` | `string?` | Set to `"web"` for web app callback redirect. Otherwise defaults to mobile deep link. |
-
-**Flow:**
-1. Generates a CSRF state parameter (random 32 bytes, 5-minute TTL)
-2. Redirects to Google OAuth consent screen with scopes: `openid`, `email`, `profile`
-
----
-
-### `GET /api/auth/google/callback`
-
-Google OAuth callback. Called by Google after user consents.
-
-**Authentication:** None (handled by Google)
-
-**Query Parameters:**
-
-| Param | Type | Description |
-|-------|------|-------------|
-| `code` | `string` | Authorization code from Google |
-| `state` | `string` | CSRF state parameter for validation |
-
-**Flow:**
-1. Validates CSRF state parameter
-2. Exchanges authorization code for Google tokens
-3. Verifies ID token and extracts user info (email, name, picture)
-4. Finds or creates user (links Google account if user exists)
-5. Generates a temporary auth code (60-second TTL)
-6. Redirects:
-   - **Mobile:** `tictactoe://auth/callback?code={authCode}`
-   - **Web:** `{origin}/auth/callback?code={authCode}`
-
----
-
-### `POST /api/auth/oauth/exchange`
-
-Exchange a temporary OAuth auth code for JWT tokens.
-
-**Authentication:** None
-
-**Request Body:**
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `code` | `string` | Temporary auth code from OAuth callback redirect |
-
-**Success Response (`200`):**
-
-```json
-{
-  "success": true,
-  "data": {
-    "accessToken": "eyJhbG...",
-    "refreshToken": "a1b2c3..."
-  }
-}
-```
-
-**Error Responses:**
-
-| Status | Error | Condition |
-|--------|-------|-----------|
-| `400` | `"Authorization code required"` | Missing code |
-| `401` | `"Invalid or expired authorization code"` | Code not found or expired (60s TTL) |
+Auth endpoints are rate-limited to **5 requests per minute** per client IP. This prevents brute-force attacks on login and credential stuffing.
 
 ---
 
@@ -315,41 +124,38 @@ Exchange a temporary OAuth auth code for JWT tokens.
 
 | Property | Access Token | Refresh Token |
 |----------|-------------|---------------|
-| **Expiry** | 15 minutes | 7 days |
-| **Payload** | `{ userId, email }` | Random 64 bytes (stored as SHA-256 hash) |
-| **Storage** | Client memory / secure storage | httpOnly cookie + response body |
-| **Rotation** | New one on each refresh | Rotated on each refresh (old revoked) |
+| Expiry | 15 minutes | 7 days |
+| Payload | `{ userId, email }` | Random 64 bytes |
+| Storage (client) | expo-secure-store | httpOnly cookie + secure store |
+| Storage (server) | Stateless (verified by signature) | SHA-256 hash in PostgreSQL |
+| Rotation | New one on each refresh | Rotated on each use (old revoked) |
+
+**Key talking point:** Access tokens are stateless (no database lookup to validate). Refresh tokens are stateful (must exist in the database). This gives the best of both worlds: fast validation for frequent operations, secure rotation for infrequent token refreshes.
 
 ---
 
-## API Routes Constants
+## At Scale
 
-Defined in `packages/shared/src/constants.ts` as `API_ROUTES`:
+| Current | At Scale |
+|---------|----------|
+| No access token revocation | **Redis token blacklist** with TTL matching remaining token lifetime |
+| Global rate limit (5/min for auth) | **Per-endpoint rate limits** (stricter on login, relaxed on profile read) |
+| Basic CSRF state for OAuth | **PKCE flow** for mobile (more secure than implicit grant) |
+| Single JWT signing key | **Key rotation** with JWKS endpoint (allows zero-downtime key changes) |
+| No account lockout | **Progressive lockout** (increasing delay after N failed login attempts) |
+| Refresh tokens in PostgreSQL | Still fine at scale -- writes are infrequent (1 per 15-min refresh per active user) |
 
-```typescript
-{
-  AUTH: {
-    REGISTER: "/api/auth/register",
-    LOGIN:    "/api/auth/login",
-    REFRESH:  "/api/auth/refresh",
-    LOGOUT:   "/api/auth/logout",
-    GOOGLE:   "/api/auth/google",
-    GITHUB:   "/api/auth/github",
-  },
-  USER: {
-    PROFILE:     "/api/user/profile",
-    STATS:       "/api/user/stats",
-    LEADERBOARD: "/api/user/leaderboard",
-  },
-  GAME: {
-    HISTORY: "/api/game/history",
-    DETAIL:  "/api/game/:id",
-  },
-  HEALTH: "/api/health",
-}
-```
+---
 
-**Note:** Some routes defined in constants (User, Game) are planned but not yet implemented. Currently implemented routes are documented above.
+## Key Talking Points Summary
+
+- **Stateless access tokens** for speed, **stateful refresh tokens** for security.
+- **Refresh token rotation** limits damage from token theft.
+- **bcrypt with 12 rounds** balances security and performance.
+- **OAuth CSRF protection** via random state parameter with Redis TTL.
+- **Temporary auth codes** avoid exposing JWTs in redirect URLs.
+- **httpOnly cookies** protect refresh tokens from XSS.
+- **Zod validation** on every endpoint ensures malformed input never reaches business logic.
 
 ---
 
