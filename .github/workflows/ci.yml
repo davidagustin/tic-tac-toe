@@ -73,6 +73,18 @@ jobs:
           docker build -f apps/server/Dockerfile -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
 
+      - name: Get runner IP
+        id: runner-ip
+        run: echo "ip=$(curl -s https://api.ipify.org)" >> "$GITHUB_OUTPUT"
+
+      - name: Open SSH for runner IP
+        run: |
+          aws ec2 authorize-security-group-ingress \
+            --group-id ${{ secrets.EC2_SG_ID }} \
+            --protocol tcp --port 22 \
+            --cidr ${{ steps.runner-ip.outputs.ip }}/32 \
+            --tag-specifications 'ResourceType=security-group-rule,Tags=[{Key=Name,Value=github-actions-temp}]'
+
       - name: Deploy to EC2
         uses: appleboy/ssh-action@v1
         with:
@@ -87,3 +99,11 @@ jobs:
 
             cd ~/app
             ./scripts/deploy.sh
+
+      - name: Revoke SSH for runner IP
+        if: always()
+        run: |
+          aws ec2 revoke-security-group-ingress \
+            --group-id ${{ secrets.EC2_SG_ID }} \
+            --protocol tcp --port 22 \
+            --cidr ${{ steps.runner-ip.outputs.ip }}/32
