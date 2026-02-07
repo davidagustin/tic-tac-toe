@@ -2,9 +2,12 @@ import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import cookie from '@fastify/cookie';
 import jwt from '@fastify/jwt';
+import formbody from '@fastify/formbody';
 import rateLimit from '@fastify/rate-limit';
 import { config } from './lib/config';
 import { healthRoutes } from './routes/health';
+import { authRoutes } from './routes/auth';
+import { oauthRoutes } from './routes/oauth';
 
 async function main() {
   const app = Fastify({
@@ -19,12 +22,13 @@ async function main() {
   // ─── Plugins ───────────────────────────────────────
   await app.register(cors, {
     origin: config.NODE_ENV === 'development'
-      ? true  // Allow all in dev
+      ? true
       : ['https://yourdomain.com'],
     credentials: true,
   });
 
   await app.register(cookie);
+  await app.register(formbody);
 
   await app.register(jwt, {
     secret: config.JWT_ACCESS_SECRET,
@@ -36,16 +40,25 @@ async function main() {
     timeWindow: '1 minute',
   });
 
+  // ─── Auth Decorator ────────────────────────────────
+  app.decorate('authenticate', async function (request: any, reply: any) {
+    try {
+      await request.jwtVerify();
+    } catch (err) {
+      reply.status(401).send({ success: false, error: 'Unauthorized' });
+    }
+  });
+
   // ─── Routes ────────────────────────────────────────
   await app.register(healthRoutes);
-  // Auth routes added in Step 7
-  // Game routes added in Phase 2
+  await app.register(authRoutes);
+  await app.register(oauthRoutes);
 
   // ─── Start ─────────────────────────────────────────
   try {
     await app.listen({ port: config.PORT, host: config.HOST });
     console.log(`\nServer running at http://localhost:${config.PORT}`);
-    console.log(`Health check: http://localhost:${config.PORT}/api/health\n`);
+    console.log(`Health: http://localhost:${config.PORT}/api/health\n`);
   } catch (err) {
     app.log.error(err);
     process.exit(1);
