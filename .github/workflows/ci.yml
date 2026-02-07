@@ -26,6 +26,9 @@ jobs:
       - name: Test shared package
         run: cd packages/shared && npx vitest run
 
+      - name: Build shared package
+        run: cd packages/shared && npx tsc
+
       - name: Generate Prisma client
         run: cd apps/server && npx prisma generate
 
