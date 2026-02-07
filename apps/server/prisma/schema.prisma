@@ -1,0 +1,113 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── User ──────────────────────────────────────────
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  passwordHash String?   // null for OAuth-only users
+  name         String
+  avatarUrl    String?
+  rating       Int       @default(1000)
+  gamesPlayed  Int       @default(0)
+  wins         Int       @default(0)
+  losses       Int       @default(0)
+  draws        Int       @default(0)
+
+  accounts     Account[]
+  gamesAsX     Game[]    @relation("PlayerX")
+  gamesAsO     Game[]    @relation("PlayerO")
+  wonGames     Game[]    @relation("Winner")
+  refreshTokens RefreshToken[]
+
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([rating])
+  @@index([email])
+}
+
+// ─── OAuth Accounts ────────────────────────────────
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  provider          String  // "google", "github"
+  providerAccountId String
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+// ─── Refresh Tokens ────────────────────────────────
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([token])
+  @@index([userId])
+}
+
+// ─── Game ──────────────────────────────────────────
+
+model Game {
+  id        String     @id @default(cuid())
+  playerXId String
+  playerOId String
+  winnerId  String?
+
+  status    GameStatus
+  moves     Move[]
+
+  playerX   User @relation("PlayerX", fields: [playerXId], references: [id])
+  playerO   User @relation("PlayerO", fields: [playerOId], references: [id])
+  winner    User? @relation("Winner", fields: [winnerId], references: [id])
+
+  startedAt DateTime @default(now())
+  endedAt   DateTime?
+
+  @@index([playerXId])
+  @@index([playerOId])
+  @@index([startedAt])
+}
+
+// ─── Move ──────────────────────────────────────────
+
+model Move {
+  id       String @id @default(cuid())
+  gameId   String
+  player   String // "X" or "O"
+  position Int    // 0-8
+  moveNum  Int
+
+  game Game @relation(fields: [gameId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@index([gameId])
+}
+
+// ─── Enums ─────────────────────────────────────────
+
+enum GameStatus {
+  IN_PROGRESS
+  X_WINS
+  O_WINS
+  DRAW
+  ABANDONED
+}
