@@ -1,7 +1,9 @@
-import { View, Text, Pressable, ScrollView } from 'react-native';
+import { View, Text, Pressable, ScrollView, Linking } from 'react-native';
 import { router } from 'expo-router';
 import { useAuthStore } from '../../stores/authStore';
 import { CryptoDonations } from '../../components/CryptoDonations';
+
+const STRIPE_DONATE_URL = 'https://buy.stripe.com/fZucN5epreyuchqdtZfnO00';
 
 export default function LobbyScreen() {
   const { user, isGuest, logout } = useAuthStore();
@@ -68,6 +70,13 @@ export default function LobbyScreen() {
       <Text className="text-text-muted text-center mt-8 mb-8 text-sm">
         Online matchmaking & chat coming in Phase 2
       </Text>
+
+      <Pressable
+        className="bg-[#635bff] rounded-xl py-4 items-center active:opacity-80 mb-4"
+        onPress={() => Linking.openURL(STRIPE_DONATE_URL)}
+      >
+        <Text className="text-white text-base font-semibold">Donate with Card</Text>
+      </Pressable>
 
       <CryptoDonations />
     </ScrollView>
