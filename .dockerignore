@@ -12,7 +12,6 @@ node_modules
 *.key
 .expo
 .DS_Store
-apps/mobile
 infra
 nginx
 .github
