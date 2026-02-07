@@ -15,6 +15,7 @@ This wiki is structured as interview prep for walking through the tic-tac-toe pr
 | [Deployment](Deployment.md) | "How do you deploy this?", "What's your CI/CD pipeline?", "How do you manage secrets?" |
 | [Build Guide](Build-Guide.md) | "How did you build this?", "What did you tackle first?", "Walk me through your implementation order" |
 | [Setup Guide](Setup-Guide.md) | "How do I run this locally?", "Walk me through your dev environment", "How do I deploy this from scratch?" |
+| [Debugging Guide](Debugging-Guide.md) | "What bugs did you hit?", "How do you debug Docker/CI issues?", "Walk me through a real production bug" |
 
 ---
 

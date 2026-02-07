@@ -471,14 +471,83 @@ This pattern applies to any compiled language in Docker (TypeScript, Go, Rust, J
 
 ---
 
+## 8. npm Lifecycle Script Fails in Docker Production Build
+
+### Symptoms
+```bash
+docker build -f apps/server/Dockerfile .
+# Step 7/14: RUN npm ci --omit=dev
+# > prepare
+# > husky
+# sh: husky: not found
+# npm error code 127
+```
+
+The Docker build failed at the production stage when running `npm ci --omit=dev`.
+
+### Diagnosis
+The root `package.json` had a `prepare` lifecycle script:
+```json
+{
+  "scripts": {
+    "prepare": "husky"
+  },
+  "devDependencies": {
+    "husky": "^9.1.7"
+  }
+}
+```
+
+npm runs `prepare` after every `npm install` and `npm ci`, even with `--omit=dev`. But `husky` is a devDependency -- with `--omit=dev`, it's not installed, so the command fails.
+
+This is a **fundamental npm behavior**: lifecycle scripts (`prepare`, `postinstall`) run regardless of which dependencies are installed. npm does not check whether the command in the script comes from a dev or production dependency.
+
+In the **build stage**, `npm install` (without `--omit=dev`) installs everything, so `husky` exists and the script succeeds. In the **production stage**, `npm ci --omit=dev` skips devDependencies, so `husky` is missing.
+
+### Fix
+Guard the script with `|| true` to make it a no-op when husky is absent:
+```json
+{
+  "scripts": {
+    "prepare": "husky || true"
+  }
+}
+```
+
+Alternative approaches (less preferred):
+```json
+// Option 2: Use npx with --no-install flag
+{ "prepare": "npx --no-install husky || true" }
+
+// Option 3: Check if husky exists first
+{ "prepare": "node -e \"try{require('husky')}catch(e){process.exit(0)}\" && husky" }
+```
+
+### Lesson
+**Any command in a `prepare` or `postinstall` script must be either a production dependency or gracefully handle its own absence.**
+
+This is a common trap in monorepos and Docker multi-stage builds where devDependencies are omitted in production. The pattern appears with:
+
+| Tool | Script | Fix |
+|------|--------|-----|
+| `husky` | `"prepare": "husky"` | `"prepare": "husky \|\| true"` |
+| `patch-package` | `"postinstall": "patch-package"` | `"postinstall": "patch-package \|\| true"` |
+| `prisma generate` | `"postinstall": "prisma generate"` | Move to build step in Dockerfile |
+| Custom scripts | `"prepare": "node scripts/setup.js"` | Guard with existence check |
+
+The `|| true` pattern is idiomatic in shell scripting -- it means "run this command, and if it fails, that's fine." The exit code is always 0 (success), so npm doesn't abort.
+
+---
+
 ## Summary: Key Debugging Strategies
 
 1. **Type System Issues:** When TypeScript widens types unexpectedly, annotate the variable, not the values
 2. **Monorepo Builds:** Always build workspace dependencies in topological order
-3. **Resource Constraints:** Never run heavy builds on production servers—use CI runners
+3. **Resource Constraints:** Never run heavy builds on production servers--use CI runners
 4. **Dynamic Infrastructure:** Use temporary security rules with cleanup guarantees (`if: always()`)
 5. **IAM Permissions:** Separate concerns (admin vs. user vs. service permissions)
 6. **Health Checks:** Match the protocol and path that real users will hit
 7. **Container Images:** Multi-stage builds should only ship compiled artifacts
+8. **Lifecycle Scripts:** Commands in `prepare`/`postinstall` must handle missing devDependencies gracefully
 
-The common thread: **verify your assumptions** (type inference, available RAM, current IP, IAM policies, redirect behavior, image contents). When something "should work" but doesn't, the assumption is usually wrong.
+The common thread: **verify your assumptions** (type inference, available RAM, current IP, IAM policies, redirect behavior, image contents, dependency availability). When something "should work" but doesn't, the assumption is usually wrong.
