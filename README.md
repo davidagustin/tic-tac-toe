@@ -157,7 +157,7 @@ These are the engineering details worth discussing in depth. Each one is a self-
 
 ## How I Built This
 
-The implementation follows a dependency chain -- each phase unblocks the next. For the full step-by-step breakdown with interview talking points for each step, see the [Build Guide](wiki/Build-Guide.md).
+The implementation follows a dependency chain -- each phase unblocks the next. For the full step-by-step breakdown with interview talking points for each step, see the [Build Guide](wiki/Build-Guide.md). For a real-world debugging example (race condition in Socket.IO event handling), see the [Debugging Guide](wiki/Debugging-Guide.md).
 
 1. **Foundation** -- Turborepo monorepo, shared game logic package with types and constants, Vitest test suite. Built first because both apps depend on it.
 2. **Server Core** -- Docker Compose for dev databases, Fastify server, Prisma schema, auth routes (register, login, JWT, OAuth). Built next because the mobile app needs auth endpoints.

@@ -1,553 +1,206 @@
-# CI/CD Debugging Guide
+# Debugging Guide -- Interview Study Guide
 
-A real-world debugging journal from building and deploying a TypeScript monorepo to AWS. Each scenario includes symptoms, diagnosis, fix, and lessons learned.
-
----
-
-## 1. TypeScript Literal Widening in Test Files
-
-### Symptoms
-```
-Type '(string | null)[]' is not assignable to type 'Board'
-```
-
-TypeScript compilation failed in test files when creating board fixtures for unit tests.
-
-### Diagnosis
-TypeScript's type inference widened our literal array:
-```typescript
-// TypeScript infers this as (string | null)[]
-const board = ['X', 'O', null, 'X', 'O', null, 'X', 'O', null];
-
-// But Board is defined as:
-type Cell = 'X' | 'O' | null;
-type Board = [Cell, Cell, Cell, Cell, Cell, Cell, Cell, Cell, Cell];
-```
-
-The problem is **literal type widening**: TypeScript treats string literals as `string` unless told otherwise. Our `Board` type requires a fixed-length tuple of specific literals (`'X'`, `'O'`, or `null`), not a variable-length array of general strings.
-
-### Fix
-Add explicit type annotation to the variable:
-```typescript
-// Correct: annotate the variable
-const board: Board = ['X', 'O', null, 'X', 'O', null, 'X', 'O', null];
-```
-
-Not individual elements:
-```typescript
-// Unnecessary: annotating each element is verbose
-const board = ['X' as const, 'O' as const, null, ...];
-```
-
-### Lesson
-**When TypeScript literal types widen, annotate the variable, not each element.** This is especially common in:
-- Test fixtures
-- Configuration objects
-- Union type arrays
-
-The type annotation tells TypeScript to enforce the stricter type from the start, preventing widening.
+This page documents how a real production bug was diagnosed and fixed. Use it to prepare for behavioral and technical debugging questions in interviews.
 
 ---
 
-## 2. Monorepo Package Resolution in CI
+## Tell Me About a Bug You Debugged
 
-### Symptoms
+**The Scenario:**
+
+The room screen froze on "Loading room..." in production. Users could see the lobby, browse rooms, and click "Join Room," but after joining, the room screen would appear and stay stuck on a loading spinner indefinitely. The bug affected both creating a new room and joining an existing room.
+
+**The Root Cause:**
+
+A race condition between Socket.IO event emission and React component mount timing. There were actually two broken code paths:
+
+1. **Create path**: When a user created a new room, the server added them to the Socket.IO room and returned a success callback, but never emitted the `room:state` event containing the room data. The creator never received any state.
+
+2. **Join path**: When a user joined an existing room, the server emitted `room:state` immediately after they joined, but the client navigated to the room screen only after the callback returned. By the time the room screen mounted and registered its Socket.IO event listeners, the `room:state` event had already been sent and lost.
+
+**The Fix:**
+
+Two changes working together:
+
+1. **Client** (mobile app): Register all Socket.IO event listeners first in the `useRoom` hook, then emit a `room:join` event to request the room state. This ensures the listener exists before the server sends the data.
+
+2. **Server**: Detect when a user is rejoining a room they're already in (an `isRejoining` flag based on Redis state), and when rejoining, skip the password check, skip duplicate "player joined" notifications to other users, and skip unnecessary lobby updates. The server always responds to `room:join` with a fresh `room:state` event, whether it's the first join or a rejoin.
+
+Together, these changes implement the "subscribe before request" pattern: the client asks for state only after it's ready to receive it, and the server always sends state when asked, treating rejoins as idempotent state-fetch operations.
+
+---
+
+## The Debugging Process (Step by Step)
+
+This is the "follow the data backward" method I used to trace the bug from the user-visible symptom down to the root cause.
+
+### Step 1: Identify the symptom
+
+The room screen shows "Loading room..." indefinitely. Looking at the code in `app/(game)/room/[id].tsx` lines 51-57, that's the fallback UI when `room` is `null`:
+
+```tsx
+if (!room) {
+  return (
+    <SafeAreaView>
+      <Text>Loading room...</Text>
+    </SafeAreaView>
+  );
+}
 ```
-apps/server/src/services/game.ts:1:32 - error TS2307: Cannot find module '@ttt/shared' or its corresponding type declarations.
+
+So the issue is: `room` is stuck at `null`. That value comes from `useRoomStore.currentRoom` via the `useRoom` hook.
+
+### Step 2: Trace the data source
+
+The `currentRoom` state is set by calling `store.setRoom()`, which is triggered inside the `useRoom` hook by this listener:
+
+```tsx
+socket.on("room:state", (roomData) => {
+  store.setRoom(roomData);
+});
 ```
 
-30+ similar errors during CI lint step, all pointing to `@ttt/shared` imports. The same code compiled fine locally.
+This means the `room:state` event was never received by the client.
 
-### Diagnosis
-Our monorepo uses workspace packages:
-```json
-// apps/server/package.json
-{
-  "dependencies": {
-    "@ttt/shared": "workspace:*"
+### Step 3: Check the server emission
+
+I checked the server-side code for both the create and join flows:
+
+**Create path** (`handlers/room.ts`, `room:create` handler):
+- Creates the room in Redis
+- Joins the user to the Socket.IO room
+- Returns a callback with `{ success: true, roomId }`
+- **NEVER emits `room:state`** to the creator
+
+**Join path** (`handlers/room.ts`, `room:join` handler at line 106):
+- Emits `room:state` immediately after adding the user to Redis
+- Then calls the callback `callback({ success: true })`
+- The client receives the callback and navigates to the room screen
+- **But the room screen hasn't mounted yet**, so the `room:state` listener doesn't exist
+
+### Step 4: Confirm the race condition timeline
+
+Here's the exact sequence of events for the join path:
+
+```
+Lobby Screen          Server              Room Screen
+  │                     │                     │
+  ├─ emit("room:join")─>│                     │
+  │                     ├─ emit("room:state")─> (no listener!)
+  │                     ├─ callback({success})>│
+  ├─ router.push() ────────────────────────────>│
+  │                     │              mounts, registers listener
+  │                     │              ...waits forever
+```
+
+The server emits `room:state` before the client screen that needs to receive it even exists. By the time the listener is registered, the event is already lost.
+
+### Step 5: Design the fix
+
+The solution is to reverse the order on the client: register listeners first, then request state.
+
+The client's `useRoom` hook already registers all Socket.IO listeners when it mounts. I added one more step at the end of the effect: emit `room:join` with the current `roomId` to ask the server for the room state. This reuses the existing `room:join` event — no new types needed in `@ttt/shared`.
+
+On the server, I added an `isRejoining` flag that detects when a user is already in a room. When rejoining:
+- Skip the password check (they already passed it the first time)
+- Skip the `room:player_joined` broadcast (don't spam "X joined" twice)
+- Skip the lobby update (no state change to broadcast)
+- Still call `addMemberToRoom`, which is idempotent (just sets `isConnected = true` if the user already exists)
+
+This makes `room:join` safely idempotent: the first call adds the user, subsequent calls just refresh state.
+
+---
+
+## The Fix (with code)
+
+### Client fix (`hooks/useRoom.ts`)
+
+After registering all Socket.IO event listeners in the `useEffect`, I added this at the end:
+
+```tsx
+useEffect(() => {
+  // ... all socket.on(...) listeners registered here ...
+
+  // Request room state now that we're ready to receive it
+  if (roomId) {
+    socket.emit("room:join", { roomId });
+  }
+
+  return () => {
+    // ... cleanup ...
+  };
+}, [roomId]);
+```
+
+**Why this works:** The listener for `room:state` is registered before `room:join` is emitted, so the server's response will be received.
+
+### Server fix (`handlers/room.ts`)
+
+Added an `isRejoining` flag and used it to skip unnecessary operations:
+
+```tsx
+const existingRoom = await getUserCurrentRoom(socket.data.userId!);
+const isRejoining = existingRoom === roomId;
+
+// Skip password check if rejoining
+if (!isRejoining) {
+  if (room.password && room.password !== password) {
+    return callback({ success: false, message: "Incorrect password" });
   }
 }
 
-// packages/shared/package.json
-{
-  "name": "@ttt/shared",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts"
+// Add the user (idempotent if rejoining)
+await addMemberToRoom(roomId, socket.data.userId!, socket.id);
+
+// Skip notifications if rejoining
+if (!isRejoining) {
+  io.to(roomId).emit("room:player_joined", { userId: socket.data.userId! });
+  broadcastLobbyUpdate(io);
 }
+
+// Always send room state
+const roomData = await getRoomForClient(roomId);
+socket.emit("room:state", roomData);
+callback({ success: true });
 ```
 
-The CI workflow only ran `tsc --noEmit` (type-checking without output) in the shared package. Since `package.json` points `main` to `dist/index.js`, but no `dist/` folder existed, TypeScript couldn't resolve the module.
-
-Locally, we had old `dist/` artifacts from previous builds, masking the issue.
-
-### Fix
-Add a build step for workspace dependencies **before** consuming packages run their lint/build:
-
-```yaml
-- name: Build shared package
-  run: cd packages/shared && npx tsc
-
-- name: Lint server
-  run: cd apps/server && npm run lint
-```
-
-### Lesson
-**In monorepos, workspace packages that reference `dist/` need to be built in dependency order.**
-
-When using TypeScript project references or workspace dependencies:
-1. Always build dependencies first
-2. Use a build tool like Turborepo or Nx to handle topological order automatically
-3. In CI, never rely on artifacts from local dev environments
+**Why this works:** The server always sends `room:state` when asked, whether it's the first join or a rejoin. Rejoining is now safe and idempotent.
 
 ---
 
-## 3. Docker Build OOM on t2.micro (1GB RAM)
+## Interview Q&A
 
-### Symptoms
-```bash
-# SSH connection hangs
-ssh -o ConnectTimeout=10 ubuntu@***.amazonaws.com
-# Establishes connection but times out waiting for banner
-```
+### Q: "How did you identify it was a race condition?"
 
-The deploy step hung for 25+ minutes. SSH daemon became unresponsive. System was completely frozen.
+> By tracing the data backward: the screen shows null → the store was never updated → the event was never received → but the server DID emit the event → so the timing was wrong. The key insight was realizing the navigation (router.push) happens after the server's response, but before the new screen mounts. That gap is where the event gets lost.
 
-### Diagnosis
-The deploy script ran:
-```bash
-docker-compose up --build
-```
+### Q: "Why not just delay the navigation until the room screen is ready?"
 
-This triggered Docker to:
-1. Run `npm install` for all workspace packages (300+ dependencies)
-2. Compile TypeScript for mobile app, server, and shared package
-3. Do all of this inside Docker on a t2.micro with only 1GB RAM and **no swap configured**
+> That would couple the lobby to the room screen's lifecycle. The cleaner fix is to make the room screen self-sufficient — it requests its own state on mount. This also handles direct URL navigation and reconnection scenarios. If a user bookmarks the room URL or refreshes the page, the screen can still fetch its state without depending on the lobby.
 
-The kernel OOM killer eventually terminated processes, including the SSH daemon.
+### Q: "Why reuse room:join instead of adding a new event like room:request_state?"
 
-Monitoring showed:
-```bash
-free -h
-#               total        used        free
-# Mem:          966Mi       954Mi        12Mi
-# Swap:            0B          0B          0B
-```
+> Fewer moving parts. `room:join` already does exactly what we need — it sends back `room:state`. Adding a new event means updating the shared types package, adding a new server handler, and maintaining two code paths that do the same thing. The rejoin guard (`isRejoining` flag) makes `room:join` safely idempotent, so reusing it eliminates complexity.
 
-### Fix
-**Short-term:** Added 2GB swap file to prevent future OOM:
-```bash
-sudo fallocate -l 2G /swapfile
-sudo chmod 600 /swapfile
-sudo mkswap /swapfile
-sudo swapon /swapfile
-echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
-```
+### Q: "What about the security of skipping the password check?"
 
-**Long-term (proper solution):** Pre-build Docker images in CI, push to Amazon ECR, EC2 just pulls pre-built images:
+> The password check is only skipped when `isRejoining` is true — meaning Redis already has a user→room mapping for this user and this room. That mapping only exists because they previously passed the password check in the lobby. An unauthenticated user can't bypass the password because they have no Redis mapping. The password was verified when they first joined; rejoining just refreshes state.
 
-```yaml
-# CI workflow
-- name: Build and push Docker images to ECR
-  run: |
-    # Login to ECR
-    aws ecr get-login-password --region us-east-1 | \
-      docker login --username AWS --password-stdin <aws-account-id>.dkr.ecr.us-east-1.amazonaws.com
+### Q: "Could this race condition happen in other places?"
 
-    # Build and push
-    docker-compose build
-    docker-compose push
-
-# EC2 deployment
-- name: Pull and restart containers
-  run: |
-    docker-compose pull
-    docker-compose up -d
-```
-
-### Lesson
-**Never build Docker images on resource-constrained hosts.**
-
-The right architecture:
-- **CI runners** (GitHub Actions): 7GB RAM, fast CPU → use for builds
-- **Production servers** (t2.micro): 1GB RAM → only pull and run pre-built images
-
-Benefits:
-1. Faster deploys (pull is faster than build)
-2. No OOM risk on production
-3. Consistent builds (same image across environments)
-4. Rollback capability (tag images by commit SHA)
-
-This pattern applies to any build-heavy process (Go compilation, webpack, etc.) on small instances.
+> Any time a Socket.IO event is emitted before the recipient has registered a listener. The pattern to prevent it: register listeners first, then emit the request. This is the "subscribe before request" pattern used in pub/sub systems. For example, if we add a spectator feature, the spectator screen should register its `game:update` listener before emitting `spectate:join`.
 
 ---
 
-## 4. Dynamic SSH Allowlisting for CI Deploy
+## Key Takeaways (for interview prep)
 
-### Symptoms
-```
-ssh: connect to host ***.amazonaws.com port 22: Connection timed out
-```
-
-CI deploy step failed immediately with timeout. Local SSH from developer machine worked fine.
-
-### Diagnosis
-EC2 security group only allowed SSH from specific CIDR blocks (developer IPs), not GitHub Actions' dynamic runner IPs.
-
-GitHub Actions runners use a [published range of IP addresses](https://api.github.com/meta), but this range is large (~150 addresses) and changes periodically. Adding all of them to the security group would be a security anti-pattern.
-
-### Fix
-Dynamically add/remove SSH access during the workflow:
-
-```yaml
-- name: Get runner IP
-  id: ip
-  run: echo "ipv4=$(curl -s https://api.ipify.org)" >> "$GITHUB_OUTPUT"
-
-- name: Authorize SSH from runner
-  run: |
-    aws ec2 authorize-security-group-ingress \
-      --group-id <security-group-id> \
-      --protocol tcp \
-      --port 22 \
-      --cidr ${{ steps.ip.outputs.ipv4 }}/32
-
-- name: Deploy to EC2
-  run: ssh ubuntu@*** './deploy.sh'
-
-- name: Revoke SSH access
-  if: always()
-  run: |
-    aws ec2 revoke-security-group-ingress \
-      --group-id <security-group-id> \
-      --protocol tcp \
-      --port 22 \
-      --cidr ${{ steps.ip.outputs.ipv4 }}/32
-```
-
-### Lesson
-**Use temporary security group rules for CI/CD SSH access, always clean up with `if: always()`.**
-
-Key practices:
-1. Use `/32` CIDR for single IP allowlisting
-2. Always revoke with `if: always()` so cleanup runs even if deploy fails
-3. Consider alternatives to SSH for deployment:
-   - AWS Systems Manager Session Manager (no open SSH port needed)
-   - AWS CodeDeploy
-   - Self-hosted GitHub Actions runner on private subnet
-
-This pattern balances security (no permanent wide-open SSH) with practicality (dynamic CI access).
+- **Debug by tracing data backward** from the symptom to the source — if the UI shows null, find where that value is set, then find where the setter is called, and so on until you reach the I/O boundary.
+- **Race conditions in SPAs** happen when navigation separates the "request" from the "listener" — the component that needs the data doesn't exist when the data arrives.
+- **Subscribe before request** — always register listeners before emitting the event that triggers the response. This is a fundamental rule in event-driven systems.
+- **Idempotent operations** make rejoin/reconnect safe — `addMemberToRoom` handles duplicates gracefully (just updates `isConnected`), so calling it twice doesn't break anything.
+- **Reuse existing events** when possible — fewer types, fewer handlers, fewer bugs. The `room:join` event already sent `room:state`, so we just made it idempotent instead of adding a new event.
+- **The server is the authority** — the client requests state, the server decides what to send. The client never assumes it has the latest data; it always asks.
 
 ---
 
-## 5. ECR Permission Gaps
-
-### Symptoms
-```
-Error: Cannot perform an interactive login from a non TTY device
-
-# Then later:
-An error occurred (AccessDeniedException) when calling the CreateRepository operation
-```
-
-CI step to push Docker images to ECR failed with permission errors.
-
-### Diagnosis
-**Problem 1:** `GetAuthorizationToken` unauthorized
-- The IAM user running CI had `AmazonEC2ContainerRegistryPowerUser` policy
-- This policy includes push/pull but we were missing `ecr:GetAuthorizationToken` for `docker login`
-
-**Problem 2:** `CreateRepository` denied
-- The ECR repository didn't exist yet
-- `AmazonEC2ContainerRegistryPowerUser` doesn't include `ecr:CreateRepository`
-
-ECR has a quirk: the "PowerUser" policy is designed for pushing/pulling to **existing** repositories, not creating them. Repo creation is considered an admin task.
-
-### Fix
-**For CI (pushing images):**
-Created repository manually via CloudShell (root access):
-```bash
-aws ecr create-repository --repository-name ttt-app
-```
-
-Attached a custom policy to the CI IAM user:
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Action": [
-        "ecr:GetAuthorizationToken",
-        "ecr:BatchCheckLayerAvailability",
-        "ecr:PutImage",
-        "ecr:InitiateLayerUpload",
-        "ecr:UploadLayerPart",
-        "ecr:CompleteLayerUpload"
-      ],
-      "Resource": "*"
-    }
-  ]
-}
-```
-
-**For EC2 (pulling images):**
-Attached `AmazonEC2ContainerRegistryReadOnly` to the EC2 IAM instance profile:
-```hcl
-# Terraform
-resource "aws_iam_role_policy_attachment" "ec2_ecr_read" {
-  role       = aws_iam_role.ec2_role.name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
-}
-```
-
-### Lesson
-**ECR PowerUser is for push/pull, not repo management. EC2 instances need explicit ECR read permissions via instance profile.**
-
-ECR permission layers:
-1. **Repo creation:** Admin task, do manually or via IaC
-2. **Push access:** `ecr:GetAuthorizationToken` + `ecr:PutImage`, etc.
-3. **Pull access:** `ecr:GetAuthorizationToken` + `ecr:BatchGetImage`
-
-EC2 instances should use IAM roles, not IAM user credentials, for ECR access.
-
----
-
-## 6. Health Check Through Nginx HTTPS Redirect
-
-### Symptoms
-```bash
-curl http://localhost/api/health
-# Returns: 301 Moved Permanently
-
-# Deploy script treats this as failure
-```
-
-The health check in `deploy.sh` returned 301 instead of 200, causing the deployment to fail rollback logic.
-
-### Diagnosis
-Nginx configuration:
-```nginx
-server {
-    listen 80;
-    return 301 https://$host$request_uri;
-}
-
-server {
-    listen 443 ssl;
-    location /api/health {
-        proxy_pass http://localhost:3000;
-    }
-}
-```
-
-The health check script used:
-```bash
-curl http://localhost/api/health
-```
-
-`curl` without `-L` doesn't follow redirects, so it received the 301 response and stopped there.
-
-### Fix
-Match the health check protocol to what nginx is actually serving:
-
-```bash
-# Use HTTPS, handle self-signed cert, fail on non-2xx
-curl -skf https://localhost/api/health
-
-# Flags:
-# -s: silent (no progress bar)
-# -k: insecure (accept self-signed cert)
-# -f: fail on HTTP errors (exit code != 0)
-```
-
-### Lesson
-**Always match your health check protocol to what nginx is serving.**
-
-Common health check patterns:
-
-| Scenario | Health Check |
-|----------|-------------|
-| Nginx redirects HTTP → HTTPS | `curl -skf https://localhost/path` |
-| Direct backend (no nginx) | `curl -f http://localhost:3000/health` |
-| Behind load balancer | Check backend directly, not through LB |
-| Startup time needed | Add `sleep 5` or retry logic |
-
-Health checks should:
-1. Test the actual path users will hit
-2. Handle SSL/redirects appropriately
-3. Return non-zero exit code on failure (use `-f` flag)
-4. Be fast (no unnecessary redirects)
-
----
-
-## 7. Docker Container Crash Loop (ERR_MODULE_NOT_FOUND)
-
-### Symptoms
-```bash
-docker ps
-# CONTAINER ID   STATUS
-# abc123         Restarting (1) 5 seconds ago
-
-docker logs ttt-app
-# Error [ERR_MODULE_NOT_FOUND]: Cannot find module '/app/packages/shared/src/constants'
-```
-
-Container started, then immediately crashed and entered a restart loop.
-
-### Diagnosis
-The error message revealed the problem: Node.js was trying to load **TypeScript source files** (`.../src/constants`) at runtime instead of compiled JavaScript.
-
-Looking at the Docker image:
-```bash
-# Inside container
-ls /app/packages/shared/
-# dist/  src/  package.json
-
-# The problem:
-node apps/server/dist/index.js
-# → requires('@ttt/shared/constants')
-# → resolves to /app/packages/shared/src/constants.ts ❌
-```
-
-This was an **old locally-built image**. The issue:
-1. Old Dockerfile copied both `src/` and `dist/` to production stage
-2. `package.json` resolution found `src/` first
-3. Node.js can't execute TypeScript at runtime
-
-The new ECR-built image had fixed this by using multi-stage builds:
-
-```dockerfile
-# Build stage
-FROM node:20-alpine AS builder
-WORKDIR /app
-COPY . .
-RUN npm install
-RUN npx turbo build
-
-# Production stage
-FROM node:20-alpine AS runner
-WORKDIR /app
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/package.json ./
-COPY --from=builder /app/packages/shared/dist ./packages/shared/dist
-COPY --from=builder /app/packages/shared/package.json ./packages/shared/
-# ❌ NO src/ copied to production stage
-```
-
-### Fix
-Deployed new ECR-built image:
-```bash
-# Pull fresh image
-docker-compose pull
-
-# Restart with new image
-docker-compose up -d
-
-# Verify
-docker logs ttt-app
-# ✓ Server listening on port 3000
-```
-
-### Lesson
-**Multi-stage Docker builds should only copy compiled artifacts to the production stage. If you see `.ts` imports at runtime, your build stage didn't run or the production stage is copying source.**
-
-Best practices:
-1. **Build stage:** Install all deps, compile TypeScript
-2. **Production stage:** Copy only `dist/`, `package.json`, and production dependencies
-3. **Never copy:** `src/`, `tests/`, `tsconfig.json`, dev dependencies
-4. **Verify:** Run a local image before pushing:
-   ```bash
-   docker build -t test-image .
-   docker run -it test-image ls /app
-   # Should NOT see src/ folders
-   ```
-
-If you see runtime errors about missing `.ts` files, check:
-- Is `dist/` being generated? (build step running?)
-- Is `src/` being excluded from production stage?
-- Does `package.json` point to `dist/`, not `src/`?
-
-This pattern applies to any compiled language in Docker (TypeScript, Go, Rust, Java).
-
----
-
-## 8. npm Lifecycle Script Fails in Docker Production Build
-
-### Symptoms
-```bash
-docker build -f apps/server/Dockerfile .
-# Step 7/14: RUN npm ci --omit=dev
-# > prepare
-# > husky
-# sh: husky: not found
-# npm error code 127
-```
-
-The Docker build failed at the production stage when running `npm ci --omit=dev`.
-
-### Diagnosis
-The root `package.json` had a `prepare` lifecycle script:
-```json
-{
-  "scripts": {
-    "prepare": "husky"
-  },
-  "devDependencies": {
-    "husky": "^9.1.7"
-  }
-}
-```
-
-npm runs `prepare` after every `npm install` and `npm ci`, even with `--omit=dev`. But `husky` is a devDependency -- with `--omit=dev`, it's not installed, so the command fails.
-
-This is a **fundamental npm behavior**: lifecycle scripts (`prepare`, `postinstall`) run regardless of which dependencies are installed. npm does not check whether the command in the script comes from a dev or production dependency.
-
-In the **build stage**, `npm install` (without `--omit=dev`) installs everything, so `husky` exists and the script succeeds. In the **production stage**, `npm ci --omit=dev` skips devDependencies, so `husky` is missing.
-
-### Fix
-Guard the script with `|| true` to make it a no-op when husky is absent:
-```json
-{
-  "scripts": {
-    "prepare": "husky || true"
-  }
-}
-```
-
-Alternative approaches (less preferred):
-```json
-// Option 2: Use npx with --no-install flag
-{ "prepare": "npx --no-install husky || true" }
-
-// Option 3: Check if husky exists first
-{ "prepare": "node -e \"try{require('husky')}catch(e){process.exit(0)}\" && husky" }
-```
-
-### Lesson
-**Any command in a `prepare` or `postinstall` script must be either a production dependency or gracefully handle its own absence.**
-
-This is a common trap in monorepos and Docker multi-stage builds where devDependencies are omitted in production. The pattern appears with:
-
-| Tool | Script | Fix |
-|------|--------|-----|
-| `husky` | `"prepare": "husky"` | `"prepare": "husky \|\| true"` |
-| `patch-package` | `"postinstall": "patch-package"` | `"postinstall": "patch-package \|\| true"` |
-| `prisma generate` | `"postinstall": "prisma generate"` | Move to build step in Dockerfile |
-| Custom scripts | `"prepare": "node scripts/setup.js"` | Guard with existence check |
-
-The `|| true` pattern is idiomatic in shell scripting -- it means "run this command, and if it fails, that's fine." The exit code is always 0 (success), so npm doesn't abort.
-
----
-
-## Summary: Key Debugging Strategies
-
-1. **Type System Issues:** When TypeScript widens types unexpectedly, annotate the variable, not the values
-2. **Monorepo Builds:** Always build workspace dependencies in topological order
-3. **Resource Constraints:** Never run heavy builds on production servers--use CI runners
-4. **Dynamic Infrastructure:** Use temporary security rules with cleanup guarantees (`if: always()`)
-5. **IAM Permissions:** Separate concerns (admin vs. user vs. service permissions)
-6. **Health Checks:** Match the protocol and path that real users will hit
-7. **Container Images:** Multi-stage builds should only ship compiled artifacts
-8. **Lifecycle Scripts:** Commands in `prepare`/`postinstall` must handle missing devDependencies gracefully
-
-The common thread: **verify your assumptions** (type inference, available RAM, current IP, IAM policies, redirect behavior, image contents, dependency availability). When something "should work" but doesn't, the assumption is usually wrong.
+**Navigation:** [Home](Home.md) | [Architecture](Architecture.md) | [Socket Events](Socket-Events.md) | [Database Schema](Database-Schema.md) | [API Reference](API-Reference.md) | [Deployment](Deployment.md) | [Build Guide](Build-Guide.md) | [Setup Guide](Setup-Guide.md) | Debugging Guide
