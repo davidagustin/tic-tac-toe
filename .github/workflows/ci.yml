@@ -18,7 +18,7 @@ jobs:
           node-version: '20'
           cache: 'npm'
 
-      - run: npm install
+      - run: npm ci
 
       - name: Lint shared package
         run: cd packages/shared && npx tsc --noEmit
@@ -26,9 +26,11 @@ jobs:
       - name: Test shared package
         run: cd packages/shared && npx vitest run
 
+      - name: Generate Prisma client
+        run: cd apps/server && npx prisma generate
+
       - name: Lint server
         run: cd apps/server && npx tsc --noEmit
-        continue-on-error: true  # May fail without Prisma generate
 
   build:
     runs-on: ubuntu-latest

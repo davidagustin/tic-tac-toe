@@ -25,11 +25,6 @@ module.exports = {
           muted: '#525252',
         },
       },
-      fontFamily: {
-        display: ['SpaceGrotesk-Bold'],
-        body: ['Inter-Regular'],
-        mono: ['JetBrainsMono-Regular'],
-      },
     },
   },
   plugins: [],

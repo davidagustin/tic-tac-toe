@@ -1,9 +1,12 @@
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { prisma } from '../lib/prisma';
-import { config } from '../lib/config';
 
 const SALT_ROUNDS = 12;
+
+function hashToken(token: string): string {
+  return crypto.createHash('sha256').update(token).digest('hex');
+}
 
 export async function hashPassword(password: string): Promise<string> {
   return bcrypt.hash(password, SALT_ROUNDS);
@@ -15,18 +18,20 @@ export async function verifyPassword(password: string, hash: string): Promise<bo
 
 export async function createRefreshToken(userId: string): Promise<string> {
   const token = crypto.randomBytes(64).toString('hex');
+  const tokenHash = hashToken(token);
   const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
 
   await prisma.refreshToken.create({
-    data: { token, userId, expiresAt },
+    data: { token: tokenHash, userId, expiresAt },
   });
 
   return token;
 }
 
 export async function validateRefreshToken(token: string) {
+  const tokenHash = hashToken(token);
   const refreshToken = await prisma.refreshToken.findUnique({
-    where: { token },
+    where: { token: tokenHash },
     include: { user: true },
   });
 
@@ -41,9 +46,17 @@ export async function validateRefreshToken(token: string) {
 }
 
 export async function revokeRefreshToken(token: string): Promise<void> {
-  await prisma.refreshToken.deleteMany({ where: { token } });
+  const tokenHash = hashToken(token);
+  await prisma.refreshToken.deleteMany({ where: { token: tokenHash } });
 }
 
 export async function revokeAllUserTokens(userId: string): Promise<void> {
   await prisma.refreshToken.deleteMany({ where: { userId } });
+}
+
+export async function cleanupExpiredTokens(): Promise<number> {
+  const result = await prisma.refreshToken.deleteMany({
+    where: { expiresAt: { lt: new Date() } },
+  });
+  return result.count;
 }

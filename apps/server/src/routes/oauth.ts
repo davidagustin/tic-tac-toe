@@ -8,6 +8,9 @@ import { config } from '../lib/config';
 // Temporary auth codes for OAuth exchange (60s TTL)
 const authCodes = new Map<string, { accessToken: string; refreshToken: string; expiresAt: number }>();
 
+// CSRF state parameters for OAuth flow (5 min TTL)
+const oauthStates = new Map<string, number>();
+
 function generateAuthCode(accessToken: string, refreshToken: string): string {
   const code = crypto.randomBytes(32).toString('hex');
   authCodes.set(code, { accessToken, refreshToken, expiresAt: Date.now() + 60_000 });
@@ -33,10 +36,14 @@ export async function oauthRoutes(app: FastifyInstance) {
 
   // ── Step 1: Redirect to Google ────────────────────
   app.get('/api/auth/google', async (request: FastifyRequest, reply: FastifyReply) => {
+    const state = crypto.randomBytes(32).toString('hex');
+    oauthStates.set(state, Date.now() + 5 * 60 * 1000); // 5 min TTL
+
     const url = googleClient.generateAuthUrl({
       access_type: 'offline',
       scope: ['openid', 'email', 'profile'],
       prompt: 'consent',
+      state,
     });
 
     return reply.redirect(url);
@@ -44,10 +51,22 @@ export async function oauthRoutes(app: FastifyInstance) {
 
   // ── Step 2: Google calls back with code ───────────
   app.get('/api/auth/google/callback', async (request: FastifyRequest, reply: FastifyReply) => {
-    const { code: googleCode } = request.query as { code?: string };
+    const { code: googleCode, state } = request.query as { code?: string; state?: string };
 
     if (!googleCode) {
       return reply.status(400).send({ success: false, error: 'Missing auth code' });
+    }
+
+    // Validate CSRF state parameter
+    if (!state || !oauthStates.has(state)) {
+      return reply.status(403).send({ success: false, error: 'Invalid or missing state parameter' });
+    }
+
+    const stateExpiry = oauthStates.get(state)!;
+    oauthStates.delete(state);
+
+    if (stateExpiry < Date.now()) {
+      return reply.status(403).send({ success: false, error: 'State parameter expired' });
     }
 
     try {
@@ -141,7 +160,7 @@ export async function oauthRoutes(app: FastifyInstance) {
 
       return reply.redirect(redirectUrl);
     } catch (error) {
-      console.error('Google OAuth error:', error);
+      request.log.error({ error }, 'Google OAuth error');
       return reply.status(500).send({ success: false, error: 'OAuth failed' });
     }
   });

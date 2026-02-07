@@ -3,8 +3,7 @@ import { View, Text, TextInput, Pressable, ActivityIndicator } from 'react-nativ
 import { router, Link } from 'expo-router';
 import { useAuthStore } from '../../stores/authStore';
 import * as WebBrowser from 'expo-web-browser';
-
-const API_URL = __DEV__ ? 'http://localhost:3001' : 'https://api.yourdomain.com';
+import { API_URL } from '../../config/api';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
@@ -12,7 +11,10 @@ export default function LoginScreen() {
   const { login, isLoading, error, clearError } = useAuthStore();
 
   const handleLogin = async () => {
-    const success = await login(email, password);
+    if (!email.trim() || !password) {
+      return;
+    }
+    const success = await login(email.trim(), password);
     if (success) {
       router.replace('/(game)/lobby');
     }

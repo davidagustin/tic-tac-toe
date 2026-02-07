@@ -21,7 +21,6 @@ interface CellProps {
 
 export function Cell({ value, index, onPress, disabled, isWinningCell }: CellProps) {
   const scale = useSharedValue(1);
-  const opacity = useSharedValue(0);
 
   const handlePress = () => {
     if (disabled || value !== null) return;
@@ -34,7 +33,6 @@ export function Cell({ value, index, onPress, disabled, isWinningCell }: CellPro
       withSpring(1.2, { damping: 4, stiffness: 300 }),
       withSpring(1, { damping: 8, stiffness: 200 })
     );
-    opacity.value = withTiming(1, { duration: 150 });
 
     onPress(index);
   };

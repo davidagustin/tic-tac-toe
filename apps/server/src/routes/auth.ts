@@ -9,6 +9,24 @@ import {
   revokeRefreshToken,
 } from '../services/auth';
 
+// ─── Helpers ───────────────────────────────────────
+
+function toUserProfile(user: any) {
+  return {
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    rating: user.rating,
+    avatarUrl: user.avatarUrl,
+    stats: {
+      gamesPlayed: user.gamesPlayed,
+      wins: user.wins,
+      losses: user.losses,
+      draws: user.draws,
+    },
+  };
+}
+
 // ─── Schemas ───────────────────────────────────────
 
 const registerSchema = z.object({
@@ -27,7 +45,9 @@ const loginSchema = z.object({
 export async function authRoutes(app: FastifyInstance) {
 
   // ── Register ──────────────────────────────────────
-  app.post('/api/auth/register', async (request: FastifyRequest, reply: FastifyReply) => {
+  app.post('/api/auth/register', {
+    config: { rateLimit: { max: 5, timeWindow: '1 minute' } }
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
     const result = registerSchema.safeParse(request.body);
     if (!result.success) {
       return reply.status(400).send({
@@ -44,7 +64,7 @@ export async function authRoutes(app: FastifyInstance) {
     if (existing) {
       return reply.status(409).send({
         success: false,
-        error: 'Email already registered',
+        error: 'Unable to create account with the provided information',
       });
     }
 
@@ -75,10 +95,7 @@ export async function authRoutes(app: FastifyInstance) {
         accessToken,
         refreshToken,
         user: {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          rating: user.rating,
+          ...toUserProfile(user),
           stats: {
             gamesPlayed: 0,
             wins: 0,
@@ -91,7 +108,9 @@ export async function authRoutes(app: FastifyInstance) {
   });
 
   // ── Login ─────────────────────────────────────────
-  app.post('/api/auth/login', async (request: FastifyRequest, reply: FastifyReply) => {
+  app.post('/api/auth/login', {
+    config: { rateLimit: { max: 5, timeWindow: '1 minute' } }
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
     const result = loginSchema.safeParse(request.body);
     if (!result.success) {
       return reply.status(400).send({
@@ -139,25 +158,15 @@ export async function authRoutes(app: FastifyInstance) {
       data: {
         accessToken,
         refreshToken,
-        user: {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          rating: user.rating,
-          avatarUrl: user.avatarUrl,
-          stats: {
-            gamesPlayed: user.gamesPlayed,
-            wins: user.wins,
-            losses: user.losses,
-            draws: user.draws,
-          },
-        },
+        user: toUserProfile(user),
       },
     };
   });
 
   // ── Refresh Token ─────────────────────────────────
-  app.post('/api/auth/refresh', async (request: FastifyRequest, reply: FastifyReply) => {
+  app.post('/api/auth/refresh', {
+    config: { rateLimit: { max: 5, timeWindow: '1 minute' } }
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
     const token = request.cookies.refreshToken || (request.body as any)?.refreshToken;
     if (!token) {
       return reply.status(401).send({
@@ -225,19 +234,7 @@ export async function authRoutes(app: FastifyInstance) {
 
     return {
       success: true,
-      data: {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        rating: user.rating,
-        avatarUrl: user.avatarUrl,
-        stats: {
-          gamesPlayed: user.gamesPlayed,
-          wins: user.wins,
-          losses: user.losses,
-          draws: user.draws,
-        },
-      },
+      data: toUserProfile(user),
     };
   });
 }

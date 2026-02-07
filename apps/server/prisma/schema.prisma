@@ -31,7 +31,6 @@ model User {
   updatedAt    DateTime  @updatedAt
 
   @@index([rating])
-  @@index([email])
 }
 
 // ─── OAuth Accounts ────────────────────────────────
@@ -59,7 +58,6 @@ model RefreshToken {
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([token])
   @@index([userId])
 }
 
@@ -71,7 +69,7 @@ model Game {
   playerOId String
   winnerId  String?
 
-  status    GameStatus
+  status    GameStatus @default(WAITING)
   moves     Move[]
 
   playerX   User @relation("PlayerX", fields: [playerXId], references: [id])
@@ -89,10 +87,10 @@ model Game {
 // ─── Move ──────────────────────────────────────────
 
 model Move {
-  id       String @id @default(cuid())
+  id       String     @id @default(cuid())
   gameId   String
-  player   String // "X" or "O"
-  position Int    // 0-8
+  player   PlayerMark
+  position Int        // 0-8
   moveNum  Int
 
   game Game @relation(fields: [gameId], references: [id], onDelete: Cascade)
@@ -100,14 +98,21 @@ model Move {
   createdAt DateTime @default(now())
 
   @@index([gameId])
+  @@index([gameId, moveNum])
 }
 
 // ─── Enums ─────────────────────────────────────────
 
 enum GameStatus {
-  IN_PROGRESS
-  X_WINS
-  O_WINS
-  DRAW
-  ABANDONED
+  WAITING     @map("waiting")
+  IN_PROGRESS @map("in_progress")
+  X_WINS      @map("x_wins")
+  O_WINS      @map("o_wins")
+  DRAW        @map("draw")
+  ABANDONED   @map("abandoned")
+}
+
+enum PlayerMark {
+  X
+  O
 }

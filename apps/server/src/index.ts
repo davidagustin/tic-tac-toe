@@ -54,11 +54,20 @@ async function main() {
   await app.register(authRoutes);
   await app.register(oauthRoutes);
 
+  // ─── Graceful Shutdown ─────────────────────────────
+  for (const signal of ['SIGINT', 'SIGTERM']) {
+    process.on(signal, async () => {
+      app.log.info(`Received ${signal}, shutting down...`);
+      await app.close();
+      process.exit(0);
+    });
+  }
+
   // ─── Start ─────────────────────────────────────────
   try {
     await app.listen({ port: config.PORT, host: config.HOST });
-    console.log(`\nServer running at http://localhost:${config.PORT}`);
-    console.log(`Health: http://localhost:${config.PORT}/api/health\n`);
+    app.log.info(`Server running at http://localhost:${config.PORT}`);
+    app.log.info(`Health: http://localhost:${config.PORT}/api/health`);
   } catch (err) {
     app.log.error(err);
     process.exit(1);
