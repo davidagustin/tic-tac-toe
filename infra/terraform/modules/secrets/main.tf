@@ -159,7 +159,10 @@ resource "aws_iam_policy" "read_secrets" {
           "ssm:GetParameters",
           "ssm:GetParametersByPath"
         ]
-        Resource = "arn:aws:ssm:*:*:parameter${local.prefix}/*"
+        Resource = [
+          "arn:aws:ssm:*:*:parameter${local.prefix}",
+          "arn:aws:ssm:*:*:parameter${local.prefix}/*"
+        ]
       },
       {
         Sid    = "DecryptSecureStrings"
