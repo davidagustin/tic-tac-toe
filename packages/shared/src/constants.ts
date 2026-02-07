@@ -1,49 +1,85 @@
 // ─── Socket Event Names ────────────────────────────────
 
 export const SOCKET_EVENTS = {
-  GAME_MOVE: 'game:move',
-  GAME_STATE: 'game:state',
-  GAME_MOVED: 'game:moved',
-  GAME_OVER: 'game:over',
-  GAME_FORFEIT: 'game:forfeit',
-  GAME_REMATCH: 'game:rematch',
-  GAME_OPPONENT_DISCONNECTED: 'game:opponent_disconnected',
-  MATCHMAKING_JOIN: 'matchmaking:join',
-  MATCHMAKING_LEAVE: 'matchmaking:leave',
-  MATCHMAKING_FOUND: 'matchmaking:found',
-  MATCHMAKING_WAITING: 'matchmaking:waiting',
-  ERROR: 'error',
+  GAME_MOVE: "game:move",
+  GAME_STATE: "game:state",
+  GAME_MOVED: "game:moved",
+  GAME_OVER: "game:over",
+  GAME_FORFEIT: "game:forfeit",
+  GAME_REMATCH: "game:rematch",
+  GAME_OPPONENT_DISCONNECTED: "game:opponent_disconnected",
+  MATCHMAKING_JOIN: "matchmaking:join",
+  MATCHMAKING_LEAVE: "matchmaking:leave",
+  MATCHMAKING_FOUND: "matchmaking:found",
+  MATCHMAKING_WAITING: "matchmaking:waiting",
+  ERROR: "error",
 } as const;
 
 // ─── Game Config ───────────────────────────────────────
 
 export const GAME_CONFIG = {
   DISCONNECT_TIMEOUT_SECONDS: 30,
-  GAME_TTL_SECONDS: 3600,           // 1 hour
+  GAME_TTL_SECONDS: 3600, // 1 hour
   MAX_MATCHMAKING_WAIT_SECONDS: 60,
   INITIAL_RATING: 1000,
   RATING_K_FACTOR: 32,
+  COUNTDOWN_SECONDS: 3,
+} as const;
+
+// ─── Room Config ──────────────────────────────────────
+
+export const ROOM_CONFIG = {
+  MAX_PLAYERS: 2,
+  MAX_SPECTATORS: 8,
+  MAX_TOTAL: 10,
+  MAX_NAME_LENGTH: 30,
+  ROOM_TTL_SECONDS: 7200, // 2 hours
+  ROOM_CODE_LENGTH: 8,
+} as const;
+
+// ─── Chat Config ──────────────────────────────────────
+
+export const CHAT_CONFIG = {
+  MAX_MESSAGE_LENGTH: 200,
+  MESSAGE_TTL_SECONDS: 86400, // 24 hours
+  MAX_HISTORY: 50,
+  RATE_LIMIT_MESSAGES: 5,
+  RATE_LIMIT_WINDOW_SECONDS: 10,
+} as const;
+
+// ─── Redis Key Prefixes ──────────────────────────────
+
+export const REDIS_KEYS = {
+  ROOM: "room:",
+  ROOM_LIST: "rooms",
+  ROOM_MEMBERS: "room:members:",
+  ROOM_CHAT: "room:chat:",
+  LOBBY_CHAT: "lobby:chat",
+  LOBBY_ONLINE: "lobby:online",
+  GAME_STATE: "game:state:",
+  USER_ROOM: "user:room:",
+  CHAT_RATE: "chat:rate:",
 } as const;
 
 // ─── API Routes ────────────────────────────────────────
 
 export const API_ROUTES = {
   AUTH: {
-    REGISTER: '/api/auth/register',
-    LOGIN: '/api/auth/login',
-    REFRESH: '/api/auth/refresh',
-    LOGOUT: '/api/auth/logout',
-    GOOGLE: '/api/auth/google',
-    GITHUB: '/api/auth/github',
+    REGISTER: "/api/auth/register",
+    LOGIN: "/api/auth/login",
+    REFRESH: "/api/auth/refresh",
+    LOGOUT: "/api/auth/logout",
+    GOOGLE: "/api/auth/google",
+    GITHUB: "/api/auth/github",
   },
   USER: {
-    PROFILE: '/api/user/profile',
-    STATS: '/api/user/stats',
-    LEADERBOARD: '/api/user/leaderboard',
+    PROFILE: "/api/user/profile",
+    STATS: "/api/user/stats",
+    LEADERBOARD: "/api/user/leaderboard",
   },
   GAME: {
-    HISTORY: '/api/game/history',
-    DETAIL: '/api/game/:id',
+    HISTORY: "/api/game/history",
+    DETAIL: "/api/game/:id",
   },
-  HEALTH: '/api/health',
+  HEALTH: "/api/health",
 } as const;

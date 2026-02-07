@@ -66,14 +66,15 @@ model RefreshToken {
 model Game {
   id        String     @id @default(cuid())
   playerXId String
-  playerOId String
+  playerOId String?    // null until opponent joins
   winnerId  String?
+  roomId    String?    // Socket.IO room ID for tracing
 
   status    GameStatus @default(WAITING)
   moves     Move[]
 
   playerX   User @relation("PlayerX", fields: [playerXId], references: [id])
-  playerO   User @relation("PlayerO", fields: [playerOId], references: [id])
+  playerO   User? @relation("PlayerO", fields: [playerOId], references: [id])
   winner    User? @relation("Winner", fields: [winnerId], references: [id])
 
   startedAt DateTime @default(now())
@@ -82,6 +83,7 @@ model Game {
   @@index([playerXId])
   @@index([playerOId])
   @@index([startedAt])
+  @@index([roomId])
 }
 
 // ─── Move ──────────────────────────────────────────
