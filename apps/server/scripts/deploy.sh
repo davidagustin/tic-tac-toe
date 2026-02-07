@@ -32,12 +32,12 @@ docker-compose -f docker-compose.prod.yml up -d --remove-orphans
 # Step 5: Run migrations
 echo "Step 5/6: Running migrations..."
 sleep 10  # Wait for postgres to be ready
-docker-compose -f docker-compose.prod.yml exec -T app npx prisma migrate deploy
+docker exec ttt-app npx prisma migrate deploy
 
 # Step 6: Health check
 echo "Step 6/6: Health check..."
 sleep 5
-if curl -sf http://localhost/api/health > /dev/null; then
+if curl -skf https://localhost/api/health > /dev/null; then
   echo "Deployment successful!"
 else
   echo "Health check failed!"
