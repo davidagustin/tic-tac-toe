@@ -281,6 +281,8 @@ npm run dev
 
 The server runs on `http://localhost:3001` and the Expo dev server starts for mobile.
 
+For a more detailed walkthrough covering prerequisites, AWS infrastructure, Docker production builds, CI/CD, and a step-by-step usage guide, see the [Setup Guide](wiki/Setup-Guide.md).
+
 ### Available Scripts
 
 Run from the repository root:
