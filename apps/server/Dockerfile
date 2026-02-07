@@ -21,11 +21,13 @@ RUN npm install
 COPY packages/shared/ ./packages/shared/
 COPY apps/server/ ./apps/server/
 
-# Generate Prisma client
+# Build shared package first
+WORKDIR /app/packages/shared
+RUN npx tsc
+
+# Generate Prisma client and build server
 WORKDIR /app/apps/server
 RUN npx prisma generate
-
-# Build
 RUN npm run build
 
 # ── Production Stage ─────────────────────────────────
@@ -45,7 +47,7 @@ COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 COPY --from=builder /app/apps/server/dist ./apps/server/dist
 COPY --from=builder /app/apps/server/prisma ./apps/server/prisma
-COPY --from=builder /app/packages/shared/src ./packages/shared/src
+COPY --from=builder /app/packages/shared/dist ./packages/shared/dist
 
 WORKDIR /app/apps/server
 
