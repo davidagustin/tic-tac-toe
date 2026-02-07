@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, Text, TextInput, Pressable, ActivityIndicator } from 'react-native';
+import { View, Text, TextInput, Pressable, ActivityIndicator, Platform } from 'react-native';
 import { router, Link } from 'expo-router';
 import { useAuthStore } from '../../stores/authStore';
 import * as WebBrowser from 'expo-web-browser';
@@ -21,7 +21,12 @@ export default function LoginScreen() {
   };
 
   const handleGoogleLogin = async () => {
-    await WebBrowser.openBrowserAsync(`${API_URL}/api/auth/google`);
+    if (Platform.OS === 'web') {
+      // On web, navigate directly — server will redirect back to /auth/callback
+      window.location.href = `${API_URL}/api/auth/google?platform=web`;
+    } else {
+      await WebBrowser.openBrowserAsync(`${API_URL}/api/auth/google`);
+    }
   };
 
   return (

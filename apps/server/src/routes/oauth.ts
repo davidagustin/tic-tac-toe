@@ -36,7 +36,10 @@ export async function oauthRoutes(app: FastifyInstance) {
 
   // ── Step 1: Redirect to Google ────────────────────
   app.get('/api/auth/google', async (request: FastifyRequest, reply: FastifyReply) => {
-    const state = crypto.randomBytes(32).toString('hex');
+    const { platform } = request.query as { platform?: string };
+    const randomToken = crypto.randomBytes(32).toString('hex');
+    // Encode platform in state so the callback knows where to redirect
+    const state = platform === 'web' ? `${randomToken}|web` : randomToken;
     oauthStates.set(state, Date.now() + 5 * 60 * 1000); // 5 min TTL
 
     const url = googleClient.generateAuthUrl({
@@ -57,7 +60,9 @@ export async function oauthRoutes(app: FastifyInstance) {
       return reply.status(400).send({ success: false, error: 'Missing auth code' });
     }
 
-    // Validate CSRF state parameter
+    // Validate CSRF state parameter and detect platform
+    const isWeb = state?.endsWith('|web');
+
     if (!state || !oauthStates.has(state)) {
       return reply.status(403).send({ success: false, error: 'Invalid or missing state parameter' });
     }
@@ -153,12 +158,18 @@ export async function oauthRoutes(app: FastifyInstance) {
       });
       const refreshToken = await createRefreshToken(user.id);
 
-      // For mobile: redirect with temporary auth code (60s TTL)
-      // The Expo app will catch this via deep linking and exchange the code for tokens
+      // Redirect with temporary auth code (60s TTL)
       const code = generateAuthCode(accessToken, refreshToken);
-      const redirectUrl = `tictactoe://auth/callback?code=${code}`;
 
-      return reply.redirect(redirectUrl);
+      if (isWeb) {
+        // Web: redirect to the web app's callback page
+        const proto = request.headers['x-forwarded-proto'] || 'https';
+        const host = request.headers.host || request.hostname;
+        return reply.redirect(`${proto}://${host}/auth/callback?code=${code}`);
+      }
+
+      // Mobile: deep link back to Expo app
+      return reply.redirect(`tictactoe://auth/callback?code=${code}`);
     } catch (error) {
       request.log.error({ error }, 'Google OAuth error');
       return reply.status(500).send({ success: false, error: 'OAuth failed' });
