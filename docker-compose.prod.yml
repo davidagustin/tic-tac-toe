@@ -53,6 +53,7 @@ services:
       - /etc/letsencrypt/live/game-practice-aws.com/fullchain.pem:/etc/nginx/ssl/fullchain.pem:ro
       - /etc/letsencrypt/live/game-practice-aws.com/privkey.pem:/etc/nginx/ssl/privkey.pem:ro
       - certbot_webroot:/var/www/certbot:ro
+      - ./apps/mobile/dist:/var/www/web:ro
     depends_on:
       - app
 
