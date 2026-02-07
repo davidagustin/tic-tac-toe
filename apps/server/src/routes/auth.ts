@@ -57,15 +57,27 @@ export async function authRoutes(app: FastifyInstance) {
       });
     }
 
-    const { password, name } = result.data;
+    const { password } = result.data;
     const email = result.data.email.toLowerCase();
+    const name = result.data.name.trim();
 
     // Check if email exists
-    const existing = await prisma.user.findUnique({ where: { email } });
-    if (existing) {
+    const existingEmail = await prisma.user.findUnique({ where: { email } });
+    if (existingEmail) {
       return reply.status(409).send({
         success: false,
         error: 'Unable to create account with the provided information',
+      });
+    }
+
+    // Check if screen name is taken (case-insensitive)
+    const existingName = await prisma.user.findFirst({
+      where: { name: { equals: name, mode: 'insensitive' } },
+    });
+    if (existingName) {
+      return reply.status(409).send({
+        success: false,
+        error: 'Screen name is already taken',
       });
     }
 
