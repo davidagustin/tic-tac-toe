@@ -70,6 +70,14 @@ export function useRoom(roomId: string) {
       gameStore.setGameState(state, user.id);
     });
 
+    // Request room state from server — handles both initial mount
+    // (where the earlier room:state event was missed) and reconnects
+    socket.emit("room:join", { roomId }, (res: { success: boolean; error?: string }) => {
+      if (!res.success) {
+        console.error("[useRoom] Join/rejoin failed:", res.error);
+      }
+    });
+
     return () => {
       socket.off("room:state");
       socket.off("room:player_joined");

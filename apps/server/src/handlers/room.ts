@@ -73,8 +73,11 @@ export function registerRoomHandlers(io: TypedServer, socket: TypedSocket) {
       return callback({ success: false, error: "Room not found" });
     }
 
-    // Password check
-    if (room.passwordHash) {
+    // Rejoin: user is already in this room (e.g. reconnect or screen mount)
+    const isRejoining = existingRoom === roomId;
+
+    // Only check password for new joins, not rejoins
+    if (!isRejoining && room.passwordHash) {
       if (!password) {
         return callback({ success: false, error: "Password required" });
       }
@@ -98,10 +101,10 @@ export function registerRoomHandlers(io: TypedServer, socket: TypedSocket) {
       return callback({ success: false, error: result.error });
     }
 
-    // Join Socket.IO room
+    // Join Socket.IO room (idempotent)
     await socket.join(`room:${roomId}`);
 
-    // Send room state to new member
+    // Send room state to member
     const { passwordHash: _, ...cleanRoom } = (await getRoom(roomId))!;
     socket.emit("room:state", cleanRoom);
 
@@ -109,18 +112,18 @@ export function registerRoomHandlers(io: TypedServer, socket: TypedSocket) {
     const chatHistory = await getChatHistory("room", roomId);
     socket.emit("room:chat_history", chatHistory);
 
-    // Find the member in the updated room (to get their assigned role)
-    const updatedMember = [...cleanRoom.players, ...cleanRoom.spectators].find(
-      (m) => m.userId === socket.data.userId,
-    );
+    // Only notify others and update lobby for new joins, not rejoins
+    if (!isRejoining) {
+      const updatedMember = [...cleanRoom.players, ...cleanRoom.spectators].find(
+        (m) => m.userId === socket.data.userId,
+      );
 
-    // Notify others in the room
-    if (updatedMember) {
-      socket.to(`room:${roomId}`).emit("room:player_joined", updatedMember);
+      if (updatedMember) {
+        socket.to(`room:${roomId}`).emit("room:player_joined", updatedMember);
+      }
+
+      io.to("lobby").emit("lobby:room_updated", toRoomInfo(cleanRoom));
     }
-
-    // Update lobby room info
-    io.to("lobby").emit("lobby:room_updated", toRoomInfo(cleanRoom));
 
     callback({ success: true });
   });
