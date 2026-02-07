@@ -1,8 +1,24 @@
 node_modules/
 dist/
 .expo/
-.env
-.env.local
 *.log
 .turbo/
 coverage/
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Terraform
+*.tfstate
+*.tfstate.backup
+*.tfvars
+.terraform/
+
+# Keys
+*.pem
+*.key
+
+# OS
+.DS_Store
