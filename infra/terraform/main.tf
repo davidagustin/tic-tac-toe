@@ -33,6 +33,11 @@ variable "key_pair_name" {
   type        = string
 }
 
+variable "ssh_allowed_cidr" {
+  description = "CIDR blocks allowed to SSH into the EC2 instance (e.g., [\"203.0.113.0/32\"])"
+  type        = list(string)
+}
+
 # ─── VPC (Default) ─────────────────────────────────
 
 data "aws_vpc" "default" {
@@ -58,7 +63,7 @@ resource "aws_security_group" "ttt_server" {
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"] # Restrict to your IP in production
+    cidr_blocks = var.ssh_allowed_cidr
   }
 
   # HTTP
@@ -117,6 +122,22 @@ resource "aws_iam_role" "ec2_role" {
 resource "aws_iam_instance_profile" "ec2_profile" {
   name = "ttt-ec2-profile"
   role = aws_iam_role.ec2_role.name
+}
+
+# ─── Secrets Module ────────────────────────────────
+
+module "secrets" {
+  source = "./modules/secrets"
+
+  project_name = "ttt"
+  environment  = "prod"
+}
+
+# ─── IAM Policy Attachment ────────────────────────
+
+resource "aws_iam_role_policy_attachment" "ec2_ssm_secrets" {
+  role       = aws_iam_role.ec2_role.name
+  policy_arn = module.secrets.secrets_policy_arn
 }
 
 # ─── EC2 Instance (Free Tier) ──────────────────────

@@ -3,7 +3,7 @@ import { Board, CellValue, GameStatus, Player } from './types';
 // ─── Constants ─────────────────────────────────────────
 
 export const BOARD_SIZE = 9;
-export const EMPTY_BOARD: Board = Array(BOARD_SIZE).fill(null);
+export const EMPTY_BOARD: Board = Object.freeze(Array(BOARD_SIZE).fill(null)) as Board;
 
 export const WIN_COMBINATIONS = [
   [0, 1, 2], // top row

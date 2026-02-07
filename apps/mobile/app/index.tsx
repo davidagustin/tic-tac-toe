@@ -50,11 +50,11 @@ export default function HomeScreen() {
         </Pressable>
 
         <Pressable
-          className="py-4 items-center active:opacity-80"
-          onPress={() => router.push('/(profile)/leaderboard')}
+          className="py-4 items-center opacity-50"
+          disabled={true}
         >
           <Text className="text-text-secondary text-base">
-            Leaderboard
+            Leaderboard (Coming Soon)
           </Text>
         </Pressable>
       </View>

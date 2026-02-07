@@ -46,12 +46,12 @@ api.interceptors.response.use(
 
       try {
         const refreshToken = await SecureStore.getItemAsync('refreshToken');
-        const { data } = await axios.post(`${API_URL}/api/auth/refresh`, {}, {
-          headers: { Cookie: `refreshToken=${refreshToken}` },
+        const { data } = await axios.post(`${API_URL}/api/auth/refresh`, {
+          refreshToken,
         });
 
         if (data.success) {
-          await saveTokens(data.data.accessToken);
+          await saveTokens(data.data.accessToken, data.data.refreshToken);
           originalRequest.headers.Authorization = `Bearer ${data.data.accessToken}`;
           return api(originalRequest);
         }
@@ -69,7 +69,7 @@ api.interceptors.response.use(
 export async function register(email: string, password: string, name: string) {
   const { data } = await api.post('/api/auth/register', { email, password, name });
   if (data.success) {
-    await saveTokens(data.data.accessToken);
+    await saveTokens(data.data.accessToken, data.data.refreshToken);
   }
   return data;
 }
@@ -77,7 +77,7 @@ export async function register(email: string, password: string, name: string) {
 export async function login(email: string, password: string) {
   const { data } = await api.post('/api/auth/login', { email, password });
   if (data.success) {
-    await saveTokens(data.data.accessToken);
+    await saveTokens(data.data.accessToken, data.data.refreshToken);
   }
   return data;
 }

@@ -73,6 +73,7 @@ export async function authRoutes(app: FastifyInstance) {
       success: true,
       data: {
         accessToken,
+        refreshToken,
         user: {
           id: user.id,
           email: user.email,
@@ -137,6 +138,7 @@ export async function authRoutes(app: FastifyInstance) {
       success: true,
       data: {
         accessToken,
+        refreshToken,
         user: {
           id: user.id,
           email: user.email,
@@ -156,7 +158,7 @@ export async function authRoutes(app: FastifyInstance) {
 
   // ── Refresh Token ─────────────────────────────────
   app.post('/api/auth/refresh', async (request: FastifyRequest, reply: FastifyReply) => {
-    const token = request.cookies.refreshToken;
+    const token = request.cookies.refreshToken || (request.body as any)?.refreshToken;
     if (!token) {
       return reply.status(401).send({
         success: false,
@@ -191,7 +193,7 @@ export async function authRoutes(app: FastifyInstance) {
 
     return {
       success: true,
-      data: { accessToken },
+      data: { accessToken, refreshToken: newRefreshToken },
     };
   });
 

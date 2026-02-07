@@ -6,15 +6,15 @@ services:
     container_name: ttt-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ttt_user
-      POSTGRES_PASSWORD: ttt_password
-      POSTGRES_DB: ttt_db
+      POSTGRES_USER: ${POSTGRES_USER:-ttt_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ttt_password}
+      POSTGRES_DB: ${POSTGRES_DB:-ttt_db}
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ttt_user -d ttt_db"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ttt_user} -d ${POSTGRES_DB:-ttt_db}"]
       interval: 5s
       timeout: 5s
       retries: 5
