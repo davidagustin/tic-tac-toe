@@ -1,4 +1,4 @@
-import { View, Text, Pressable } from 'react-native';
+import { Platform, View, Text, Pressable } from 'react-native';
 import { router } from 'expo-router';
 import { Board } from '../components/game/Board';
 import { GameStatus } from '../components/game/GameStatus';
@@ -11,7 +11,9 @@ export default function LocalGameScreen() {
     useLocalGame();
 
   const handleReset = () => {
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    if (Platform.OS !== 'web') {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    }
     resetGame();
   };
 

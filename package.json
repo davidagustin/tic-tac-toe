@@ -1,6 +1,7 @@
 {
   "name": "tic-tac-toe",
   "private": true,
+  "packageManager": "npm@11.3.0",
   "workspaces": [
     "apps/*",
     "packages/*"

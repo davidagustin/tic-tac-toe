@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { View, Text, TextInput, Pressable, ActivityIndicator } from 'react-native';
-import { router, Link } from 'expo-router';
+import { router, Link, useNavigation } from 'expo-router';
 import { useAuthStore } from '../../stores/authStore';
 
 export default function RegisterScreen() {
@@ -35,6 +35,13 @@ export default function RegisterScreen() {
 
   return (
     <View className="flex-1 bg-bg-primary px-6 justify-center">
+      <Pressable
+        onPress={() => router.back()}
+        className="absolute top-16 left-6 z-10 active:opacity-60"
+      >
+        <Text className="text-text-secondary text-base">&larr; Back</Text>
+      </Pressable>
+
       <Text className="text-4xl font-bold text-text-primary mb-2">
         Create account
       </Text>

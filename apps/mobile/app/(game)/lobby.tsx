@@ -71,14 +71,18 @@ export default function LobbyScreen() {
         Online matchmaking & chat coming in Phase 2
       </Text>
 
-      <Pressable
-        className="bg-[#635bff] rounded-xl py-4 items-center active:opacity-80 mb-4"
-        onPress={() => Linking.openURL(STRIPE_DONATE_URL)}
-      >
-        <Text className="text-white text-base font-semibold">Donate with Card</Text>
-      </Pressable>
-
-      <CryptoDonations />
+      <View className="flex-row justify-center items-center gap-2 opacity-50 mt-4">
+        <Pressable
+          onPress={() => Linking.openURL(STRIPE_DONATE_URL)}
+          className="active:opacity-80"
+          hitSlop={12}
+        >
+          <View className="w-6 h-6 rounded-full items-center justify-center bg-[#635bff]">
+            <Text className="text-white text-[9px] font-bold">S</Text>
+          </View>
+        </Pressable>
+        <CryptoDonations />
+      </View>
     </ScrollView>
   );
 }

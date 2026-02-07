@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { View, Text, Pressable } from 'react-native';
+import { Platform, View, Text, Pressable } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
 
@@ -30,7 +30,9 @@ function WalletRow({ wallet }: { wallet: WalletAddress }) {
 
   const handleCopy = useCallback(async () => {
     await Clipboard.setStringAsync(wallet.address);
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    if (Platform.OS !== 'web') {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    }
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   }, [wallet.address]);
@@ -38,38 +40,22 @@ function WalletRow({ wallet }: { wallet: WalletAddress }) {
   const truncated = `${wallet.address.slice(0, 8)}...${wallet.address.slice(-6)}`;
 
   return (
-    <Pressable
-      onPress={handleCopy}
-      className="bg-bg-card border border-neutral-800 rounded-xl p-4 active:opacity-80"
-    >
-      <View className="flex-row items-center justify-between mb-2">
-        <View className="flex-row items-center gap-2">
-          <View
-            style={{ backgroundColor: wallet.color }}
-            className="w-7 h-7 rounded-full items-center justify-center"
-          >
-            <Text className="text-white text-xs font-bold">
-              {wallet.symbol.charAt(0)}
-            </Text>
-          </View>
-          <Text className="text-text-primary font-semibold">{wallet.label}</Text>
-          <Text className="text-text-muted text-sm">({wallet.symbol})</Text>
-        </View>
-        <Text className={`text-sm font-semibold ${copied ? 'text-green-400' : 'text-accent-primary'}`}>
-          {copied ? 'Copied!' : 'Tap to copy'}
+    <Pressable onPress={handleCopy} className="active:opacity-80">
+      <View
+        style={{ backgroundColor: copied ? '#22c55e' : wallet.color }}
+        className="w-6 h-6 rounded-full items-center justify-center"
+      >
+        <Text className="text-white text-[9px] font-bold">
+          {copied ? '\u2713' : wallet.symbol}
         </Text>
       </View>
-      <Text className="text-text-secondary text-xs font-mono">{truncated}</Text>
     </Pressable>
   );
 }
 
 export function CryptoDonations() {
   return (
-    <View className="gap-3">
-      <Text className="text-text-secondary text-sm text-center mb-1">
-        Support the project with crypto
-      </Text>
+    <View className="flex-row gap-2">
       {WALLETS.map((wallet) => (
         <WalletRow key={wallet.symbol} wallet={wallet} />
       ))}

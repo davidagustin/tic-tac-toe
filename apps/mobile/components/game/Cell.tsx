@@ -1,4 +1,4 @@
-import { Pressable, Text } from 'react-native';
+import { Platform, Pressable, Text } from 'react-native';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -25,8 +25,10 @@ export function Cell({ value, index, onPress, disabled, isWinningCell }: CellPro
   const handlePress = () => {
     if (disabled || value !== null) return;
 
-    // Haptic feedback on move
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    // Haptic feedback on move (native only)
+    if (Platform.OS !== 'web') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    }
 
     // Pop animation
     scale.value = withSequence(

@@ -48,15 +48,6 @@ export default function HomeScreen() {
             Continue as Guest
           </Text>
         </Pressable>
-
-        <Pressable
-          className="py-4 items-center opacity-50"
-          disabled={true}
-        >
-          <Text className="text-text-secondary text-base">
-            Leaderboard (Coming Soon)
-          </Text>
-        </Pressable>
       </View>
     </View>
   );

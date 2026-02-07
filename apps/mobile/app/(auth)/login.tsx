@@ -26,6 +26,13 @@ export default function LoginScreen() {
 
   return (
     <View className="flex-1 bg-bg-primary px-6 justify-center">
+      <Pressable
+        onPress={() => router.back()}
+        className="absolute top-16 left-6 z-10 active:opacity-60"
+      >
+        <Text className="text-text-secondary text-base">&larr; Back</Text>
+      </Pressable>
+
       <Text className="text-4xl font-bold text-text-primary mb-2">
         Welcome back
       </Text>
