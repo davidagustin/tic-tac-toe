@@ -133,11 +133,16 @@ module "secrets" {
   environment  = "prod"
 }
 
-# ─── IAM Policy Attachment ────────────────────────
+# ─── IAM Policy Attachments ───────────────────────
 
 resource "aws_iam_role_policy_attachment" "ec2_ssm_secrets" {
   role       = aws_iam_role.ec2_role.name
   policy_arn = module.secrets.secrets_policy_arn
+}
+
+resource "aws_iam_role_policy_attachment" "ec2_ecr_read" {
+  role       = aws_iam_role.ec2_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
 }
 
 # ─── EC2 Instance (Free Tier) ──────────────────────

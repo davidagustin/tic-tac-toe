@@ -42,8 +42,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build Docker image
+      - name: Build server Docker image
         run: docker build -f apps/server/Dockerfile -t ttt-server:test .
+
+      - name: Build nginx Docker image
+        run: docker build -f nginx/Dockerfile -t ttt-nginx:test .
 
   deploy:
     runs-on: ubuntu-latest
@@ -64,14 +67,16 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Build, tag, and push Docker image
+      - name: Build, tag, and push Docker images
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          ECR_REPOSITORY: ttt-server
           IMAGE_TAG: ${{ github.sha }}
         run: |
-          docker build -f apps/server/Dockerfile -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker build -f apps/server/Dockerfile -t $ECR_REGISTRY/ttt-server:$IMAGE_TAG .
+          docker push $ECR_REGISTRY/ttt-server:$IMAGE_TAG
+
+          docker build -f nginx/Dockerfile -t $ECR_REGISTRY/ttt-nginx:$IMAGE_TAG .
+          docker push $ECR_REGISTRY/ttt-nginx:$IMAGE_TAG
 
       - name: Get runner IP
         id: runner-ip
@@ -95,6 +100,8 @@ jobs:
             set -e
 
             export ECR_URL=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/ttt-server
+            export AWS_REGION=${{ secrets.AWS_REGION }}
+            export ECR_REGISTRY=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com
             export IMAGE_TAG=${{ github.sha }}
 
             cd ~/app

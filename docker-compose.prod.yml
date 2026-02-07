@@ -1,8 +1,6 @@
 services:
   app:
-    build:
-      context: .
-      dockerfile: apps/server/Dockerfile
+    image: ${ECR_REGISTRY}/ttt-server:${IMAGE_TAG}
     container_name: ttt-app
     restart: unless-stopped
     env_file: .env
@@ -42,9 +40,7 @@ services:
       retries: 5
 
   nginx:
-    build:
-      context: .
-      dockerfile: nginx/Dockerfile
+    image: ${ECR_REGISTRY}/ttt-nginx:${IMAGE_TAG}
     container_name: ttt-nginx
     restart: unless-stopped
     ports:
