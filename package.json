@@ -16,7 +16,7 @@
     "format:check": "biome format .",
     "test": "turbo run test",
     "validate": "turbo run lint && biome check .",
-    "prepare": "husky"
+    "prepare": "husky || true"
   },
   "lint-staged": {
     "*.{ts,tsx,js,jsx,json}": [
