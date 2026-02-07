@@ -1,7 +1,15 @@
 import { View, Text, Pressable } from 'react-native';
 import { router } from 'expo-router';
+import { useAuthStore } from '../stores/authStore';
 
 export default function HomeScreen() {
+  const { loginAsGuest } = useAuthStore();
+
+  const handleGuestMode = () => {
+    loginAsGuest();
+    router.push('/(game)/lobby');
+  };
+
   return (
     <View className="flex-1 bg-bg-primary items-center justify-center px-6">
       {/* Logo / Title */}
@@ -34,7 +42,7 @@ export default function HomeScreen() {
 
         <Pressable
           className="bg-bg-card border border-neutral-800 py-4 rounded-2xl items-center active:opacity-80"
-          onPress={() => router.push('/(game)/lobby')}
+          onPress={handleGuestMode}
         >
           <Text className="text-text-primary text-lg font-semibold">
             Continue as Guest
