@@ -110,11 +110,13 @@ export async function oauthRoutes(app: FastifyInstance) {
         return reply.status(400).send({ success: false, error: 'Email not provided by Google' });
       }
 
+      const normalizedEmail = email.toLowerCase();
+
       // Find or create user
       let user = await prisma.user.findFirst({
         where: {
           OR: [
-            { email },
+            { email: normalizedEmail },
             { accounts: { some: { provider: 'google', providerAccountId: googleId } } },
           ],
         },
@@ -125,8 +127,8 @@ export async function oauthRoutes(app: FastifyInstance) {
         // New user — create account
         user = await prisma.user.create({
           data: {
-            email,
-            name: name || email.split('@')[0],
+            email: normalizedEmail,
+            name: name || normalizedEmail.split('@')[0],
             avatarUrl: picture,
             accounts: {
               create: {

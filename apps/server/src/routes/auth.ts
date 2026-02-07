@@ -57,7 +57,8 @@ export async function authRoutes(app: FastifyInstance) {
       });
     }
 
-    const { email, password, name } = result.data;
+    const { password, name } = result.data;
+    const email = result.data.email.toLowerCase();
 
     // Check if email exists
     const existing = await prisma.user.findUnique({ where: { email } });
@@ -119,7 +120,8 @@ export async function authRoutes(app: FastifyInstance) {
       });
     }
 
-    const { email, password } = result.data;
+    const { password } = result.data;
+    const email = result.data.email.toLowerCase();
 
     // Find user
     const user = await prisma.user.findUnique({ where: { email } });
