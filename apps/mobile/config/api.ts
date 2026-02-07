@@ -1,2 +1,2 @@
-const API_URL = __DEV__ ? 'http://localhost:3001' : 'https://api.yourdomain.com';
+const API_URL = __DEV__ ? 'http://localhost:3001' : 'https://game-practice-aws.com';
 export { API_URL };

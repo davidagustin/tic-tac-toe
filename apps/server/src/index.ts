@@ -23,7 +23,7 @@ async function main() {
   await app.register(cors, {
     origin: config.NODE_ENV === 'development'
       ? true
-      : ['https://yourdomain.com'],
+      : ['https://game-practice-aws.com'],
     credentials: true,
   });
 
