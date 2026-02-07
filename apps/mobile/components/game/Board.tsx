@@ -1,6 +1,6 @@
-import { View } from 'react-native';
-import { Cell } from './Cell';
-import { Board as BoardType, CellValue } from '@ttt/shared';
+import type { Board as BoardType, CellValue } from "@ttt/shared";
+import { View } from "react-native";
+import { Cell } from "./Cell";
 
 interface BoardProps {
   board: BoardType;

@@ -1,3 +1,3 @@
-export * from './types';
-export * from './gameLogic';
-export * from './constants';
+export * from "./constants";
+export * from "./gameLogic";
+export * from "./types";

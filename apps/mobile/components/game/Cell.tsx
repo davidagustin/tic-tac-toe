@@ -1,13 +1,12 @@
-import { Platform, Pressable, Text } from 'react-native';
+import type { CellValue } from "@ttt/shared";
+import * as Haptics from "expo-haptics";
+import { Platform, Pressable, Text } from "react-native";
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
-  withSpring,
   withSequence,
-  withTiming,
-} from 'react-native-reanimated';
-import * as Haptics from 'expo-haptics';
-import { CellValue } from '@ttt/shared';
+  withSpring,
+} from "react-native-reanimated";
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
@@ -26,14 +25,14 @@ export function Cell({ value, index, onPress, disabled, isWinningCell }: CellPro
     if (disabled || value !== null) return;
 
     // Haptic feedback on move (native only)
-    if (Platform.OS !== 'web') {
+    if (Platform.OS !== "web") {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
 
     // Pop animation
     scale.value = withSequence(
       withSpring(1.2, { damping: 4, stiffness: 300 }),
-      withSpring(1, { damping: 8, stiffness: 200 })
+      withSpring(1, { damping: 8, stiffness: 200 }),
     );
 
     onPress(index);
@@ -47,12 +46,12 @@ export function Cell({ value, index, onPress, disabled, isWinningCell }: CellPro
   const row = Math.floor(index / 3);
   const col = index % 3;
   const borderClasses = [
-    col < 2 ? 'border-r border-neutral-700' : '',
-    row < 2 ? 'border-b border-neutral-700' : '',
-  ].join(' ');
+    col < 2 ? "border-r border-neutral-700" : "",
+    row < 2 ? "border-b border-neutral-700" : "",
+  ].join(" ");
 
-  const textColor = value === 'X' ? 'text-accent-x' : 'text-accent-o';
-  const winHighlight = isWinningCell ? 'bg-accent-primary/10' : '';
+  const textColor = value === "X" ? "text-accent-x" : "text-accent-o";
+  const winHighlight = isWinningCell ? "bg-accent-primary/10" : "";
 
   return (
     <AnimatedPressable
@@ -61,11 +60,7 @@ export function Cell({ value, index, onPress, disabled, isWinningCell }: CellPro
       onPress={handlePress}
       disabled={disabled}
     >
-      {value && (
-        <Text className={`text-5xl font-bold ${textColor}`}>
-          {value}
-        </Text>
-      )}
+      {value && <Text className={`text-5xl font-bold ${textColor}`}>{value}</Text>}
     </AnimatedPressable>
   );
 }

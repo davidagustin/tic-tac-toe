@@ -1,20 +1,20 @@
-import { FastifyInstance } from 'fastify';
-import { prisma } from '../lib/prisma';
+import type { FastifyInstance } from "fastify";
+import { prisma } from "../lib/prisma";
 
 export async function healthRoutes(app: FastifyInstance) {
-  app.get('/api/health', async (request, reply) => {
+  app.get("/api/health", async (_request, reply) => {
     try {
       // Check DB connection
       await prisma.$queryRaw`SELECT 1`;
 
       return {
-        status: 'ok',
+        status: "ok",
       };
-    } catch (error) {
+    } catch (_error) {
       reply.status(503);
       return {
-        status: 'error',
-        message: 'Database connection failed',
+        status: "error",
+        message: "Database connection failed",
       };
     }
   });

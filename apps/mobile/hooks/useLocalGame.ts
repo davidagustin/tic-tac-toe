@@ -1,15 +1,15 @@
-import { useState, useCallback } from 'react';
 import {
-  Board,
-  Player,
-  GameStatus,
-  EMPTY_BOARD,
   applyMove,
-  isValidMove,
+  type Board,
+  EMPTY_BOARD,
+  type GameStatus,
   getGameStatus,
   getNextTurn,
   getWinningCells,
-} from '@ttt/shared';
+  isValidMove,
+  type Player,
+} from "@ttt/shared";
+import { useCallback, useState } from "react";
 
 interface LocalGameState {
   board: Board;
@@ -22,8 +22,8 @@ interface LocalGameState {
 export function useLocalGame() {
   const [gameState, setGameState] = useState<LocalGameState>({
     board: EMPTY_BOARD,
-    currentTurn: 'X',
-    status: 'in_progress',
+    currentTurn: "X",
+    status: "in_progress",
     winningCells: null,
     moveCount: 0,
   });
@@ -31,7 +31,7 @@ export function useLocalGame() {
   const makeMove = useCallback((position: number) => {
     setGameState((prev) => {
       // Validate
-      if (prev.status !== 'in_progress') return prev;
+      if (prev.status !== "in_progress") return prev;
       if (!isValidMove(prev.board, position)) return prev;
 
       // Apply
@@ -52,14 +52,14 @@ export function useLocalGame() {
   const resetGame = useCallback(() => {
     setGameState({
       board: EMPTY_BOARD,
-      currentTurn: 'X',
-      status: 'in_progress',
+      currentTurn: "X",
+      status: "in_progress",
       winningCells: null,
       moveCount: 0,
     });
   }, []);
 
-  const isGameOver = gameState.status !== 'in_progress';
+  const isGameOver = gameState.status !== "in_progress";
 
   return {
     ...gameState,

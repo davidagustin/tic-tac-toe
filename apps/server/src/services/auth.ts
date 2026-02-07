@@ -1,11 +1,11 @@
-import bcrypt from 'bcryptjs';
-import crypto from 'crypto';
-import { prisma } from '../lib/prisma';
+import crypto from "node:crypto";
+import bcrypt from "bcryptjs";
+import { prisma } from "../lib/prisma";
 
 const SALT_ROUNDS = 12;
 
 function hashToken(token: string): string {
-  return crypto.createHash('sha256').update(token).digest('hex');
+  return crypto.createHash("sha256").update(token).digest("hex");
 }
 
 export async function hashPassword(password: string): Promise<string> {
@@ -17,7 +17,7 @@ export async function verifyPassword(password: string, hash: string): Promise<bo
 }
 
 export async function createRefreshToken(userId: string): Promise<string> {
-  const token = crypto.randomBytes(64).toString('hex');
+  const token = crypto.randomBytes(64).toString("hex");
   const tokenHash = hashToken(token);
   const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
 

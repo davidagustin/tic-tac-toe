@@ -1,12 +1,12 @@
-import '@fastify/jwt';
+import "@fastify/jwt";
 
-declare module 'fastify' {
+declare module "fastify" {
   interface FastifyInstance {
     authenticate: any;
   }
 }
 
-declare module '@fastify/jwt' {
+declare module "@fastify/jwt" {
   interface FastifyJWT {
     payload: { userId: string; email: string };
     user: { userId: string; email: string };

@@ -3,16 +3,8 @@
   "compilerOptions": {
     "strict": true,
     "paths": {
-      "@ttt/shared": [
-        "../../packages/shared/src"
-      ]
+      "@ttt/shared": ["../../packages/shared/src"]
     }
   },
-  "include": [
-    "**/*.ts",
-    "**/*.tsx",
-    ".expo/types/**/*.ts",
-    "expo-env.d.ts",
-    "nativewind-env.d.ts"
-  ]
+  "include": ["**/*.ts", "**/*.tsx", ".expo/types/**/*.ts", "expo-env.d.ts", "nativewind-env.d.ts"]
 }

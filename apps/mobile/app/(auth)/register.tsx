@@ -1,33 +1,33 @@
-import { useState } from 'react';
-import { View, Text, TextInput, Pressable, ActivityIndicator } from 'react-native';
-import { router, Link, useNavigation } from 'expo-router';
-import { useAuthStore } from '../../stores/authStore';
+import { Link, router } from "expo-router";
+import { useState } from "react";
+import { ActivityIndicator, Pressable, Text, TextInput, View } from "react-native";
+import { useAuthStore } from "../../stores/authStore";
 
 export default function RegisterScreen() {
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [localError, setLocalError] = useState('');
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [localError, setLocalError] = useState("");
   const { register, isLoading, error, clearError } = useAuthStore();
 
   const handleRegister = async () => {
-    setLocalError('');
+    setLocalError("");
     clearError();
 
     if (password !== confirmPassword) {
-      setLocalError('Passwords do not match');
+      setLocalError("Passwords do not match");
       return;
     }
 
     if (password.length < 8) {
-      setLocalError('Password must be at least 8 characters');
+      setLocalError("Password must be at least 8 characters");
       return;
     }
 
     const success = await register(email, password, name);
     if (success) {
-      router.replace('/(game)/lobby');
+      router.replace("/(game)/lobby");
     }
   };
 
@@ -42,12 +42,8 @@ export default function RegisterScreen() {
         <Text className="text-text-secondary text-base">&larr; Back</Text>
       </Pressable>
 
-      <Text className="text-4xl font-bold text-text-primary mb-2">
-        Create account
-      </Text>
-      <Text className="text-text-secondary text-lg mb-10">
-        Start your ranked journey
-      </Text>
+      <Text className="text-4xl font-bold text-text-primary mb-2">Create account</Text>
+      <Text className="text-text-secondary text-lg mb-10">Start your ranked journey</Text>
 
       {displayError && (
         <View className="bg-red-900/30 border border-red-800 rounded-xl p-3 mb-4">
@@ -93,7 +89,7 @@ export default function RegisterScreen() {
       </View>
 
       <Pressable
-        className={`bg-accent-primary py-4 rounded-2xl items-center mb-8 ${isLoading ? 'opacity-60' : 'active:opacity-80'}`}
+        className={`bg-accent-primary py-4 rounded-2xl items-center mb-8 ${isLoading ? "opacity-60" : "active:opacity-80"}`}
         onPress={handleRegister}
         disabled={isLoading}
       >

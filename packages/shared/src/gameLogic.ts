@@ -1,4 +1,4 @@
-import { Board, CellValue, GameStatus, Player } from './types';
+import type { Board, GameStatus, Player } from "./types";
 
 // ─── Constants ─────────────────────────────────────────
 
@@ -75,17 +75,17 @@ export function isBoardFull(board: Board): boolean {
  */
 export function getGameStatus(board: Board): GameStatus {
   const winner = checkWinner(board);
-  if (winner === 'X') return 'x_wins';
-  if (winner === 'O') return 'o_wins';
-  if (isBoardFull(board)) return 'draw';
-  return 'in_progress';
+  if (winner === "X") return "x_wins";
+  if (winner === "O") return "o_wins";
+  if (isBoardFull(board)) return "draw";
+  return "in_progress";
 }
 
 /**
  * Get the next player's turn
  */
 export function getNextTurn(currentTurn: Player): Player {
-  return currentTurn === 'X' ? 'O' : 'X';
+  return currentTurn === "X" ? "O" : "X";
 }
 
 /**
@@ -111,5 +111,5 @@ export function getAvailableMoves(board: Board): number[] {
  */
 export function getCurrentTurn(board: Board): Player {
   const moveCount = getMoveCount(board);
-  return moveCount % 2 === 0 ? 'X' : 'O';
+  return moveCount % 2 === 0 ? "X" : "O";
 }

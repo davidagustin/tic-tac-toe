@@ -1,7 +1,7 @@
-import * as SecureStore from 'expo-secure-store';
-import { Platform } from 'react-native';
-import axios from 'axios';
-import { API_URL } from '../config/api';
+import axios from "axios";
+import * as SecureStore from "expo-secure-store";
+import { Platform } from "react-native";
+import { API_URL } from "../config/api";
 
 const api = axios.create({
   baseURL: API_URL,
@@ -13,7 +13,7 @@ const api = axios.create({
 // fall back to localStorage on web.
 
 async function setItem(key: string, value: string) {
-  if (Platform.OS === 'web') {
+  if (Platform.OS === "web") {
     localStorage.setItem(key, value);
   } else {
     await SecureStore.setItemAsync(key, value);
@@ -21,14 +21,14 @@ async function setItem(key: string, value: string) {
 }
 
 async function getItem(key: string): Promise<string | null> {
-  if (Platform.OS === 'web') {
+  if (Platform.OS === "web") {
     return localStorage.getItem(key);
   }
   return SecureStore.getItemAsync(key);
 }
 
 async function deleteItem(key: string) {
-  if (Platform.OS === 'web') {
+  if (Platform.OS === "web") {
     localStorage.removeItem(key);
   } else {
     await SecureStore.deleteItemAsync(key);
@@ -36,19 +36,19 @@ async function deleteItem(key: string) {
 }
 
 export async function saveTokens(accessToken: string, refreshToken?: string) {
-  await setItem('accessToken', accessToken);
+  await setItem("accessToken", accessToken);
   if (refreshToken) {
-    await setItem('refreshToken', refreshToken);
+    await setItem("refreshToken", refreshToken);
   }
 }
 
 export async function getAccessToken(): Promise<string | null> {
-  return getItem('accessToken');
+  return getItem("accessToken");
 }
 
 export async function clearTokens() {
-  await deleteItem('accessToken');
-  await deleteItem('refreshToken');
+  await deleteItem("accessToken");
+  await deleteItem("refreshToken");
 }
 
 // ─── API Interceptor (auto-refresh) ────────────────
@@ -70,7 +70,7 @@ api.interceptors.response.use(
       originalRequest._retry = true;
 
       try {
-        const refreshToken = await getItem('refreshToken');
+        const refreshToken = await getItem("refreshToken");
         const { data } = await axios.post(`${API_URL}/api/auth/refresh`, {
           refreshToken,
         });
@@ -92,7 +92,7 @@ api.interceptors.response.use(
 // ─── Auth API Calls ────────────────────────────────
 
 export async function register(email: string, password: string, name: string) {
-  const { data } = await api.post('/api/auth/register', { email, password, name });
+  const { data } = await api.post("/api/auth/register", { email, password, name });
   if (data.success) {
     await saveTokens(data.data.accessToken, data.data.refreshToken);
   }
@@ -100,7 +100,7 @@ export async function register(email: string, password: string, name: string) {
 }
 
 export async function login(email: string, password: string) {
-  const { data } = await api.post('/api/auth/login', { email, password });
+  const { data } = await api.post("/api/auth/login", { email, password });
   if (data.success) {
     await saveTokens(data.data.accessToken, data.data.refreshToken);
   }
@@ -109,14 +109,14 @@ export async function login(email: string, password: string) {
 
 export async function logout() {
   try {
-    await api.post('/api/auth/logout');
+    await api.post("/api/auth/logout");
   } finally {
     await clearTokens();
   }
 }
 
 export async function getMe() {
-  const { data } = await api.get('/api/auth/me');
+  const { data } = await api.get("/api/auth/me");
   return data;
 }
 

@@ -1,6 +1,6 @@
-import { create } from 'zustand';
-import { UserProfile } from '@ttt/shared';
-import * as authService from '../services/auth';
+import type { UserProfile } from "@ttt/shared";
+import { create } from "zustand";
+import * as authService from "../services/auth";
 
 interface AuthState {
   user: UserProfile | null;
@@ -35,7 +35,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       set({ error: result.error, isLoading: false });
       return false;
     } catch (err: any) {
-      set({ error: err.response?.data?.error || 'Registration failed', isLoading: false });
+      set({ error: err.response?.data?.error || "Registration failed", isLoading: false });
       return false;
     }
   },
@@ -51,7 +51,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       set({ error: result.error, isLoading: false });
       return false;
     } catch (err: any) {
-      set({ error: err.response?.data?.error || 'Login failed', isLoading: false });
+      set({ error: err.response?.data?.error || "Login failed", isLoading: false });
       return false;
     }
   },
@@ -61,7 +61,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({
       user: {
         id: guestId,
-        email: '',
+        email: "",
         name: `Guest_${Math.floor(Math.random() * 9999)}`,
         rating: 1000,
         stats: { gamesPlayed: 0, wins: 0, losses: 0, draws: 0 },

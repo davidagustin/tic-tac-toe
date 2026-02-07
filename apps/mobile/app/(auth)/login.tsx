@@ -1,13 +1,13 @@
-import { useState } from 'react';
-import { View, Text, TextInput, Pressable, ActivityIndicator, Platform } from 'react-native';
-import { router, Link } from 'expo-router';
-import { useAuthStore } from '../../stores/authStore';
-import * as WebBrowser from 'expo-web-browser';
-import { API_URL } from '../../config/api';
+import { Link, router } from "expo-router";
+import * as WebBrowser from "expo-web-browser";
+import { useState } from "react";
+import { ActivityIndicator, Platform, Pressable, Text, TextInput, View } from "react-native";
+import { API_URL } from "../../config/api";
+import { useAuthStore } from "../../stores/authStore";
 
 export default function LoginScreen() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const { login, isLoading, error, clearError } = useAuthStore();
 
   const handleLogin = async () => {
@@ -16,12 +16,12 @@ export default function LoginScreen() {
     }
     const success = await login(email.trim(), password);
     if (success) {
-      router.replace('/(game)/lobby');
+      router.replace("/(game)/lobby");
     }
   };
 
   const handleGoogleLogin = async () => {
-    if (Platform.OS === 'web') {
+    if (Platform.OS === "web") {
       // On web, navigate directly — server will redirect back to /auth/callback
       window.location.href = `${API_URL}/api/auth/google?platform=web`;
     } else {
@@ -38,15 +38,14 @@ export default function LoginScreen() {
         <Text className="text-text-secondary text-base">&larr; Back</Text>
       </Pressable>
 
-      <Text className="text-4xl font-bold text-text-primary mb-2">
-        Welcome back
-      </Text>
-      <Text className="text-text-secondary text-lg mb-10">
-        Sign in to play online
-      </Text>
+      <Text className="text-4xl font-bold text-text-primary mb-2">Welcome back</Text>
+      <Text className="text-text-secondary text-lg mb-10">Sign in to play online</Text>
 
       {error && (
-        <Pressable onPress={clearError} className="bg-red-900/30 border border-red-800 rounded-xl p-3 mb-4">
+        <Pressable
+          onPress={clearError}
+          className="bg-red-900/30 border border-red-800 rounded-xl p-3 mb-4"
+        >
           <Text className="text-red-400 text-sm">{error}</Text>
         </Pressable>
       )}
@@ -73,7 +72,7 @@ export default function LoginScreen() {
       </View>
 
       <Pressable
-        className={`bg-accent-primary py-4 rounded-2xl items-center mb-4 ${isLoading ? 'opacity-60' : 'active:opacity-80'}`}
+        className={`bg-accent-primary py-4 rounded-2xl items-center mb-4 ${isLoading ? "opacity-60" : "active:opacity-80"}`}
         onPress={handleLogin}
         disabled={isLoading}
       >

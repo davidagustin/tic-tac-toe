@@ -1,32 +1,32 @@
-import { useEffect, useState } from 'react';
-import { View, Text, ActivityIndicator, Pressable } from 'react-native';
-import { router, useLocalSearchParams } from 'expo-router';
-import { useAuthStore } from '../../stores/authStore';
-import { api, saveTokens } from '../../services/auth';
+import { router, useLocalSearchParams } from "expo-router";
+import { useEffect, useState } from "react";
+import { ActivityIndicator, Pressable, Text, View } from "react-native";
+import { api, saveTokens } from "../../services/auth";
+import { useAuthStore } from "../../stores/authStore";
 
 export default function AuthCallbackScreen() {
   const { code } = useLocalSearchParams<{ code: string }>();
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
 
   useEffect(() => {
     if (!code) {
-      setError('No authorization code received');
+      setError("No authorization code received");
       return;
     }
 
     (async () => {
       try {
-        const { data } = await api.post('/api/auth/oauth/exchange', { code });
+        const { data } = await api.post("/api/auth/oauth/exchange", { code });
 
         if (data.success) {
           await saveTokens(data.data.accessToken, data.data.refreshToken);
           await useAuthStore.getState().loadUser();
-          router.replace('/(game)/lobby');
+          router.replace("/(game)/lobby");
         } else {
-          setError(data.error || 'Failed to sign in');
+          setError(data.error || "Failed to sign in");
         }
       } catch {
-        setError('Authentication failed. Please try again.');
+        setError("Authentication failed. Please try again.");
       }
     })();
   }, [code]);
@@ -35,7 +35,7 @@ export default function AuthCallbackScreen() {
     return (
       <View className="flex-1 bg-bg-primary items-center justify-center px-6">
         <Text className="text-red-400 text-lg mb-4">{error}</Text>
-        <Pressable onPress={() => router.replace('/(auth)/login')}>
+        <Pressable onPress={() => router.replace("/(auth)/login")}>
           <Text className="text-accent-primary text-base font-semibold">Back to Login</Text>
         </Pressable>
       </View>
