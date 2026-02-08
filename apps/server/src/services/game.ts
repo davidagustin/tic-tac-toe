@@ -2,6 +2,7 @@ import type { GameMove, OnlineGameState, Player, RoomDetail } from "@ttt/shared"
 import {
   applyMove,
   checkWinner,
+  GAME_CONFIG,
   getGameStatus,
   getNextTurn,
   getWinningCells,
@@ -12,6 +13,17 @@ import {
 } from "@ttt/shared";
 import { prisma } from "../lib/prisma";
 import { getRedis } from "../lib/redis";
+
+// ─── ELO Rating ──────────────────────────────────────
+
+function calculateElo(
+  playerRating: number,
+  opponentRating: number,
+  actualScore: number, // 1 = win, 0 = loss, 0.5 = draw
+): number {
+  const expected = 1 / (1 + 10 ** ((opponentRating - playerRating) / 400));
+  return Math.round(playerRating + GAME_CONFIG.RATING_K_FACTOR * (actualScore - expected));
+}
 
 // ─── Game State in Redis ──────────────────────────────
 
@@ -194,7 +206,31 @@ export async function persistCompletedGame(state: OnlineGameState): Promise<void
       },
     });
 
-    // Update user stats for non-guest players
+    // Fetch current ratings for ELO calculation
+    const xRating = xIsGuest
+      ? GAME_CONFIG.INITIAL_RATING
+      : ((
+          await prisma.user.findUnique({
+            where: { id: state.playerX.userId },
+            select: { rating: true },
+          })
+        )?.rating ?? GAME_CONFIG.INITIAL_RATING);
+    const oRating = oIsGuest
+      ? GAME_CONFIG.INITIAL_RATING
+      : ((
+          await prisma.user.findUnique({
+            where: { id: state.playerO.userId },
+            select: { rating: true },
+          })
+        )?.rating ?? GAME_CONFIG.INITIAL_RATING);
+
+    const xScore = winner === "X" ? 1 : winner === "O" ? 0 : 0.5;
+    const oScore = 1 - xScore;
+
+    const newXRating = calculateElo(xRating, oRating, xScore);
+    const newORating = calculateElo(oRating, xRating, oScore);
+
+    // Update user stats and rating for non-guest players
     const updates: Promise<any>[] = [];
 
     if (!xIsGuest) {
@@ -203,6 +239,7 @@ export async function persistCompletedGame(state: OnlineGameState): Promise<void
           where: { id: state.playerX.userId },
           data: {
             gamesPlayed: { increment: 1 },
+            rating: newXRating,
             ...(winner === "X"
               ? { wins: { increment: 1 } }
               : winner === "O"
@@ -219,6 +256,7 @@ export async function persistCompletedGame(state: OnlineGameState): Promise<void
           where: { id: state.playerO.userId },
           data: {
             gamesPlayed: { increment: 1 },
+            rating: newORating,
             ...(winner === "O"
               ? { wins: { increment: 1 } }
               : winner === "X"
