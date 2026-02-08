@@ -150,12 +150,6 @@ export default function LobbyScreen() {
               <Text className="text-text-primary font-semibold">Create Room</Text>
             </Pressable>
           )}
-          <Pressable
-            className="flex-1 bg-bg-card border border-neutral-800 py-3 rounded-xl items-center active:opacity-80"
-            onPress={() => router.push("/local-game")}
-          >
-            <Text className="text-text-primary font-semibold">Local Game</Text>
-          </Pressable>
         </View>
 
         {/* Tabs */}
@@ -194,7 +188,7 @@ export default function LobbyScreen() {
             <View className="items-center py-12">
               <Text className="text-text-muted text-base mb-2">No rooms yet</Text>
               <Text className="text-text-muted text-sm">
-                {isGuest ? "Join a room or play locally" : "Create one to start playing!"}
+                {isGuest ? "Join a room to start playing!" : "Create one to start playing!"}
               </Text>
             </View>
           }

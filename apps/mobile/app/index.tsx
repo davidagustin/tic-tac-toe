@@ -20,13 +20,6 @@ export default function HomeScreen() {
       <View className="w-full max-w-sm gap-4">
         <Pressable
           className="bg-accent-primary py-4 rounded-2xl items-center active:opacity-80"
-          onPress={() => router.push("/local-game")}
-        >
-          <Text className="text-text-primary text-lg font-semibold">Local Game</Text>
-        </Pressable>
-
-        <Pressable
-          className="bg-bg-card border border-neutral-800 py-4 rounded-2xl items-center active:opacity-80"
           onPress={() => router.push("/(auth)/login")}
         >
           <Text className="text-text-primary text-lg font-semibold">Play Online</Text>

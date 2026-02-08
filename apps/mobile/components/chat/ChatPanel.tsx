@@ -9,6 +9,13 @@ interface ChatPanelProps {
   myUserId: string;
 }
 
+function formatTimestamp(isoString: string): string {
+  return new Date(isoString).toLocaleTimeString([], {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
 export function ChatPanel({ messages, onSend, myUserId }: ChatPanelProps) {
   const [text, setText] = useState("");
   const flatListRef = useRef<FlatList>(null);
@@ -29,9 +36,16 @@ export function ChatPanel({ messages, onSend, myUserId }: ChatPanelProps) {
             className={`max-w-[80%] px-3 py-1.5 rounded-xl ${isMe ? "bg-accent-primary/20" : "bg-bg-secondary"}`}
           >
             {!isMe && (
-              <Text className="text-accent-primary text-xs font-semibold">{item.userName}</Text>
+              <Text className="text-accent-primary text-xs font-semibold mb-0.5">
+                {item.userName}
+              </Text>
             )}
-            <Text className="text-text-primary text-sm">{item.text}</Text>
+            <View className="flex-row flex-wrap items-end">
+              <Text className="text-text-primary text-sm flex-shrink">{item.text}</Text>
+              <Text className="text-text-muted text-[9px] ml-2 opacity-60">
+                {formatTimestamp(item.timestamp)}
+              </Text>
+            </View>
           </View>
         </View>
       );
