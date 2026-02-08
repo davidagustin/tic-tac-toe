@@ -1,5 +1,5 @@
-import type { RoomDetail, RoomInfo, RoomMember } from "@ttt/shared";
-import { REDIS_KEYS, ROOM_CONFIG } from "@ttt/shared";
+import type { GameType, PlayerSide, RoomDetail, RoomInfo, RoomMember } from "@ttt/shared";
+import { GAME_TYPE_CONFIG, REDIS_KEYS, ROOM_CONFIG } from "@ttt/shared";
 import { nanoid } from "nanoid";
 import { getRedis } from "../lib/redis";
 
@@ -11,11 +11,14 @@ export async function createRoom(
   name: string,
   host: { userId: string; userName: string; rating: number },
   passwordHash?: string,
+  gameType: GameType = "tic_tac_toe",
 ): Promise<RoomDetail> {
   const redis = getRedis();
   const roomId = nanoid(ROOM_CONFIG.ROOM_CODE_LENGTH);
   const now = new Date().toISOString();
   const expiresAt = new Date(Date.now() + ROOM_CONFIG.ROOM_TTL_SECONDS * 1000).toISOString();
+
+  const config = GAME_TYPE_CONFIG[gameType];
 
   const hostMember: RoomMember = {
     userId: host.userId,
@@ -24,7 +27,7 @@ export async function createRoom(
     role: "player",
     isReady: false,
     isConnected: true,
-    mark: "X",
+    mark: config.defaultSide1,
   };
 
   const room: RoomDetail = {
@@ -37,6 +40,7 @@ export async function createRoom(
     spectators: [],
     createdAt: now,
     expiresAt,
+    gameType,
   };
 
   const pipeline = redis.pipeline();
@@ -128,6 +132,10 @@ export async function listRooms(): Promise<RoomInfo[]> {
   return rooms;
 }
 
+function getDefaultSide2(gameType: GameType): PlayerSide {
+  return GAME_TYPE_CONFIG[gameType].defaultSide2;
+}
+
 export async function addMemberToRoom(
   roomId: string,
   member: RoomMember,
@@ -150,7 +158,7 @@ export async function addMemberToRoom(
 
   if (room.players.length < ROOM_CONFIG.MAX_PLAYERS && room.status === "waiting") {
     member.role = "player";
-    member.mark = "O"; // host is always X
+    member.mark = getDefaultSide2(room.gameType);
     room.players.push(member);
   } else if (room.spectators.length < ROOM_CONFIG.MAX_SPECTATORS) {
     member.role = "spectator";
@@ -188,6 +196,9 @@ export async function removeMemberFromRoom(
     return { room: null, deleted: true };
   }
 
+  const side1 = GAME_TYPE_CONFIG[room.gameType].defaultSide1;
+  const side2 = GAME_TYPE_CONFIG[room.gameType].defaultSide2;
+
   // Transfer host if host left
   let newHostId: string | undefined;
   if (room.hostId === userId) {
@@ -199,20 +210,20 @@ export async function removeMemberFromRoom(
     if (room.players.length === 0 && room.spectators.length > 0) {
       const promoted = room.spectators.shift()!;
       promoted.role = "player";
-      promoted.mark = "X";
+      promoted.mark = side1;
       room.players.push(promoted);
     }
   }
 
   // Reassign marks if a player left
   if (room.players.length === 1) {
-    room.players[0].mark = "X";
+    room.players[0].mark = side1;
     room.players[0].isReady = false;
     // Promote first spectator to player slot if available
     if (room.spectators.length > 0 && room.status === "waiting") {
       const promoted = room.spectators.shift()!;
       promoted.role = "player";
-      promoted.mark = "O";
+      promoted.mark = side2;
       promoted.isReady = false;
       room.players.push(promoted);
     }
@@ -261,6 +272,7 @@ function toRoomInfo(room: RoomDetail): RoomInfo {
     maxSpectators: ROOM_CONFIG.MAX_SPECTATORS,
     status: room.status,
     createdAt: room.createdAt,
+    gameType: room.gameType,
   };
 }
 

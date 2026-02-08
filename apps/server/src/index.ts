@@ -10,6 +10,9 @@ import socketioPlugin from "./plugins/socketio";
 import { authRoutes } from "./routes/auth";
 import { healthRoutes } from "./routes/health";
 import { oauthRoutes } from "./routes/oauth";
+import { chessEngine } from "./services/engines/chessEngine";
+import { registerEngine } from "./services/engines/registry";
+import { tttEngine } from "./services/engines/tttEngine";
 
 async function main() {
   const app = Fastify({
@@ -40,6 +43,10 @@ async function main() {
     max: 100,
     timeWindow: "1 minute",
   });
+
+  // ─── Game Engines ────────────────────────────────────
+  registerEngine(tttEngine);
+  registerEngine(chessEngine);
 
   // ─── Redis ─────────────────────────────────────────
   getRedis(); // Initialize Redis connection

@@ -13,6 +13,7 @@
     "@expo/metro-runtime": "~4.0.1",
     "@ttt/shared": "*",
     "axios": "^1.7.0",
+    "chess.js": "^1.4.0",
     "expo": "~52.0.0",
     "expo-clipboard": "^8.0.8",
     "expo-constants": "~17.0.0",

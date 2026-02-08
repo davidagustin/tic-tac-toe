@@ -1,7 +1,9 @@
+import type { ChessColor, Player } from "@ttt/shared";
 import { router, useLocalSearchParams } from "expo-router";
 import { useCallback } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { ChatPanel } from "../../../components/chat/ChatPanel";
+import { ChessBoard } from "../../../components/chess/ChessBoard";
 import { Board } from "../../../components/game/Board";
 import { GameOverModal } from "../../../components/room/GameOverModal";
 import { PlayerSlot } from "../../../components/room/PlayerSlot";
@@ -43,10 +45,40 @@ export default function RoomScreen() {
   const isGameOver =
     !!gameState && gameState.status !== "in_progress" && gameState.status !== "waiting";
   const amPlayer = myRole === "player";
+  const isChess = room?.gameType === "chess";
 
-  // Player X is always first in the players array by convention
-  const playerX = room?.players.find((p) => p.mark === "X") ?? null;
-  const playerO = room?.players.find((p) => p.mark === "O") ?? null;
+  // Players by mark
+  const player1 = isChess
+    ? (room?.players.find((p) => p.mark === "white") ?? null)
+    : (room?.players.find((p) => p.mark === "X") ?? null);
+  const player2 = isChess
+    ? (room?.players.find((p) => p.mark === "black") ?? null)
+    : (room?.players.find((p) => p.mark === "O") ?? null);
+
+  const mark1 = isChess ? "white" : "X";
+  const mark2 = isChess ? "black" : "O";
+
+  // Derive winner for game over modal
+  const getWinner = (): Player | ChessColor | null => {
+    if (!gameState) return null;
+    if (gameState.status === "x_wins") return "X";
+    if (gameState.status === "o_wins") return "O";
+    if (gameState.status === "white_wins") return "white";
+    if (gameState.status === "black_wins") return "black";
+    return null;
+  };
+
+  // Turn label
+  const getTurnLabel = (): string => {
+    if (!gameState) return "";
+    if (amPlayer) {
+      return isMyTurn ? "Your turn!" : "Opponent's turn...";
+    }
+    if (gameState.gameType === "tic_tac_toe") {
+      return `${gameState.currentTurn}'s turn`;
+    }
+    return `${gameState.currentTurn}'s turn`;
+  };
 
   if (!room) {
     return (
@@ -61,9 +93,20 @@ export default function RoomScreen() {
       {/* Header */}
       <View className="px-6 pt-16 pb-3 flex-row justify-between items-center">
         <View className="flex-1">
-          <Text className="text-text-primary text-xl font-bold" numberOfLines={1}>
-            {room.name}
-          </Text>
+          <View className="flex-row items-center gap-2">
+            <Text className="text-text-primary text-xl font-bold" numberOfLines={1}>
+              {room.name}
+            </Text>
+            <View
+              className={`px-2 py-0.5 rounded-full ${isChess ? "bg-amber-500/20" : "bg-blue-500/20"}`}
+            >
+              <Text
+                className={`text-[10px] font-bold ${isChess ? "text-amber-500" : "text-blue-500"}`}
+              >
+                {isChess ? "CHESS" : "TTT"}
+              </Text>
+            </View>
+          </View>
           <Text className="text-text-muted text-xs">
             Room {room.id} {room.hasPassword ? "🔒" : ""}
           </Text>
@@ -88,21 +131,21 @@ export default function RoomScreen() {
         {/* Player slots */}
         <View className="gap-3 mb-4">
           <PlayerSlot
-            member={playerX}
-            mark="X"
-            isHost={playerX?.userId === room.hostId}
-            canKick={isHost && playerX?.userId !== user?.id && !isPlaying}
-            onKick={() => playerX && kickPlayer(playerX.userId)}
+            member={player1}
+            mark={mark1}
+            isHost={player1?.userId === room.hostId}
+            canKick={isHost && player1?.userId !== user?.id && !isPlaying}
+            onKick={() => player1 && kickPlayer(player1.userId)}
           />
           <View className="items-center">
             <Text className="text-text-muted text-xs font-bold">VS</Text>
           </View>
           <PlayerSlot
-            member={playerO}
-            mark="O"
-            isHost={playerO?.userId === room.hostId}
-            canKick={isHost && playerO?.userId !== user?.id && !isPlaying}
-            onKick={() => playerO && kickPlayer(playerO.userId)}
+            member={player2}
+            mark={mark2}
+            isHost={player2?.userId === room.hostId}
+            canKick={isHost && player2?.userId !== user?.id && !isPlaying}
+            onKick={() => player2 && kickPlayer(player2.userId)}
           />
         </View>
 
@@ -140,20 +183,33 @@ export default function RoomScreen() {
               <Text
                 className={`text-lg font-bold mb-3 ${isMyTurn ? "text-green-500" : "text-text-muted"}`}
               >
-                {amPlayer
-                  ? isMyTurn
-                    ? "Your turn!"
-                    : "Opponent's turn..."
-                  : `${gameState.currentTurn}'s turn`}
+                {getTurnLabel()}
               </Text>
             )}
 
-            <Board
-              board={gameState.board}
-              onCellPress={makeMove}
-              disabled={!isMyTurn || !amPlayer}
-              winningCells={winningCells}
-            />
+            {gameState.gameType === "tic_tac_toe" ? (
+              <Board
+                board={gameState.board}
+                onCellPress={(pos) => makeMove({ gameType: "tic_tac_toe", position: pos })}
+                disabled={!isMyTurn || !amPlayer}
+                winningCells={winningCells}
+              />
+            ) : (
+              <ChessBoard
+                fen={gameState.fen}
+                myColor={
+                  (myMark === "white" || myMark === "black" ? myMark : null) as ChessColor | null
+                }
+                isMyTurn={isMyTurn}
+                disabled={!amPlayer}
+                lastMove={gameState.lastMove}
+                isCheck={gameState.isCheck}
+                capturedPieces={gameState.capturedPieces}
+                onMove={(from, to, promotion) =>
+                  makeMove({ gameType: "chess", from, to, promotion })
+                }
+              />
+            )}
 
             {isPlaying && amPlayer && (
               <Pressable
@@ -178,12 +234,13 @@ export default function RoomScreen() {
       {/* Game Over Modal */}
       <GameOverModal
         visible={isGameOver}
-        winner={gameState?.status === "x_wins" ? "X" : gameState?.status === "o_wins" ? "O" : null}
+        winner={getWinner()}
         myMark={myMark}
         iOfferedRematch={iOfferedRematch}
         rematchOfferedBy={rematchOfferedBy}
         onRematch={offerRematch}
         onLeave={handleLeave}
+        gameType={room.gameType}
       />
     </View>
   );

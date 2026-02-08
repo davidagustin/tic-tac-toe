@@ -58,15 +58,14 @@ Rules:
 
 ---
 
-## Push When Done
+## Commit When Done
 
 When you finish a task that changes files:
 
 1. **Stage** the relevant files (`git add`).
 2. **Commit** with a clear message describing the work.
-3. **Push** to the remote (`git push`).
 
-Do this as the final step before telling the user the task is complete. If the user says "don't push" or the repo has no remote, skip the push step.
+Do **not** push to the remote automatically. Only push if the user explicitly asks.
 
 ---
 

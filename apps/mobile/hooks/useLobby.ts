@@ -99,6 +99,7 @@ export function useLobby() {
     (
       name: string,
       password?: string,
+      gameType?: string,
     ): Promise<{ success: boolean; roomId?: string; error?: string }> => {
       return new Promise((resolve) => {
         const socket = getSocket();
@@ -106,7 +107,7 @@ export function useLobby() {
           resolve({ success: false, error: "Not connected" });
           return;
         }
-        socket.emit("room:create", { name, password }, resolve);
+        socket.emit("room:create", { name, password, gameType: gameType as any }, resolve);
       });
     },
     [],

@@ -1,17 +1,29 @@
-import type { Player, RoomMember } from "@ttt/shared";
+import type { PlayerSide, RoomMember } from "@ttt/shared";
 import { Pressable, Text, View } from "react-native";
 
 interface PlayerSlotProps {
   member: RoomMember | null;
-  mark: Player;
+  mark: PlayerSide;
   isHost: boolean;
   canKick: boolean;
   onKick?: () => void;
 }
 
+function getMarkDisplay(mark: PlayerSide): { label: string; color: string; bg: string } {
+  switch (mark) {
+    case "X":
+      return { label: "X", color: "text-accent-x", bg: "bg-accent-x/20" };
+    case "O":
+      return { label: "O", color: "text-accent-o", bg: "bg-accent-o/20" };
+    case "white":
+      return { label: "\u2654", color: "text-white", bg: "bg-white/10" };
+    case "black":
+      return { label: "\u265A", color: "text-neutral-300", bg: "bg-neutral-500/20" };
+  }
+}
+
 export function PlayerSlot({ member, mark, isHost, canKick, onKick }: PlayerSlotProps) {
-  const markColor = mark === "X" ? "text-accent-x" : "text-accent-o";
-  const markBg = mark === "X" ? "bg-accent-x/20" : "bg-accent-o/20";
+  const display = getMarkDisplay(mark);
 
   if (!member) {
     return (
@@ -25,8 +37,8 @@ export function PlayerSlot({ member, mark, isHost, canKick, onKick }: PlayerSlot
     <View className="bg-bg-card rounded-2xl p-4 border border-neutral-800">
       <View className="flex-row items-center justify-between">
         <View className="flex-row items-center gap-3">
-          <View className={`w-10 h-10 rounded-full items-center justify-center ${markBg}`}>
-            <Text className={`text-xl font-bold ${markColor}`}>{mark}</Text>
+          <View className={`w-10 h-10 rounded-full items-center justify-center ${display.bg}`}>
+            <Text className={`text-xl font-bold ${display.color}`}>{display.label}</Text>
           </View>
           <View>
             <View className="flex-row items-center gap-2">

@@ -13,8 +13,8 @@ export default function HomeScreen() {
   return (
     <View className="flex-1 bg-bg-primary items-center justify-center px-6">
       {/* Logo / Title */}
-      <Text className="text-5xl font-bold text-text-primary mb-2 tracking-tight">TIC TAC TOE</Text>
-      <Text className="text-text-secondary text-lg mb-12">Play online. Climb the ranks.</Text>
+      <Text className="text-5xl font-bold text-text-primary mb-2 tracking-tight">GAME ROOM</Text>
+      <Text className="text-text-secondary text-lg mb-12">Chess. Tic-Tac-Toe. Compete online.</Text>
 
       {/* Menu Buttons */}
       <View className="w-full max-w-sm gap-4">

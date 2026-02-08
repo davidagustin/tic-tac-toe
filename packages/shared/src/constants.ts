@@ -62,6 +62,26 @@ export const REDIS_KEYS = {
   PASSWORD_RESET: "password_reset:",
 } as const;
 
+// ─── Game Type Config ────────────────────────────────
+
+import type { GameType, PlayerSide } from "./types";
+
+export const GAME_TYPE_CONFIG: Record<
+  GameType,
+  { displayName: string; maxPlayers: number; defaultSide1: PlayerSide; defaultSide2: PlayerSide }
+> = {
+  tic_tac_toe: { displayName: "Tic-Tac-Toe", maxPlayers: 2, defaultSide1: "X", defaultSide2: "O" },
+  chess: { displayName: "Chess", maxPlayers: 2, defaultSide1: "white", defaultSide2: "black" },
+} as const;
+
+export const CHESS_CONFIG = {
+  INITIAL_FEN: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+  PIECE_SYMBOLS: {
+    white: { k: "\u2654", q: "\u2655", r: "\u2656", b: "\u2657", n: "\u2658", p: "\u2659" },
+    black: { k: "\u265A", q: "\u265B", r: "\u265C", b: "\u265D", n: "\u265E", p: "\u265F" },
+  },
+} as const;
+
 // ─── API Routes ────────────────────────────────────────
 
 export const API_ROUTES = {

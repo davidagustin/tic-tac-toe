@@ -26,11 +26,34 @@ model User {
   gamesAsO     Game[]    @relation("PlayerO")
   wonGames     Game[]    @relation("Winner")
   refreshTokens RefreshToken[]
+  ratings      UserRating[]
 
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
   @@index([rating])
+}
+
+// ─── Per-Game Rating ──────────────────────────────
+
+model UserRating {
+  id          String   @id @default(cuid())
+  userId      String
+  gameType    GameType
+  rating      Int      @default(1000)
+  gamesPlayed Int      @default(0)
+  wins        Int      @default(0)
+  losses      Int      @default(0)
+  draws       Int      @default(0)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, gameType])
+  @@index([userId])
+  @@index([gameType, rating])
 }
 
 // ─── OAuth Accounts ────────────────────────────────
@@ -69,6 +92,7 @@ model Game {
   playerOId String?    // null until opponent joins
   winnerId  String?
   roomId    String?    // Socket.IO room ID for tracing
+  gameType  GameType   @default(TIC_TAC_TOE)
 
   status    GameStatus @default(WAITING)
   moves     Move[]
@@ -84,16 +108,23 @@ model Game {
   @@index([playerOId])
   @@index([startedAt])
   @@index([roomId])
+  @@index([gameType])
 }
 
 // ─── Move ──────────────────────────────────────────
 
 model Move {
-  id       String     @id @default(cuid())
-  gameId   String
-  player   PlayerMark
-  position Int        // 0-8
-  moveNum  Int
+  id         String     @id @default(cuid())
+  gameId     String
+  player     PlayerMark
+  position   Int?       // 0-8 for TTT, null for chess
+  moveNum    Int
+
+  // Chess-specific fields
+  fromSquare String?    // e.g. "e2"
+  toSquare   String?    // e.g. "e4"
+  san        String?    // standard algebraic notation
+  promotion  String?    // "q", "r", "b", "n"
 
   game Game @relation(fields: [gameId], references: [id], onDelete: Cascade)
 
@@ -105,6 +136,11 @@ model Move {
 
 // ─── Enums ─────────────────────────────────────────
 
+enum GameType {
+  TIC_TAC_TOE @map("tic_tac_toe")
+  CHESS       @map("chess")
+}
+
 enum GameStatus {
   WAITING     @map("waiting")
   IN_PROGRESS @map("in_progress")
@@ -112,9 +148,13 @@ enum GameStatus {
   O_WINS      @map("o_wins")
   DRAW        @map("draw")
   ABANDONED   @map("abandoned")
+  WHITE_WINS  @map("white_wins")
+  BLACK_WINS  @map("black_wins")
 }
 
 enum PlayerMark {
   X
   O
+  WHITE
+  BLACK
 }

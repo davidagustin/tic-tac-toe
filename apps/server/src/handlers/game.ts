@@ -15,11 +15,11 @@ type TypedSocket = Socket<ClientToServerEvents, ServerToClientEvents>;
 const rematchOffers = new Map<string, Set<string>>();
 
 export function registerGameHandlers(io: TypedServer, socket: TypedSocket) {
-  socket.on("game:move", async ({ position }) => {
+  socket.on("game:move", async (movePayload) => {
     const roomId = await getUserRoom(socket.data.userId);
     if (!roomId) return;
 
-    const result = await processMove(roomId, socket.data.userId, position);
+    const result = await processMove(roomId, socket.data.userId, movePayload);
 
     if (!result.success) {
       socket.emit("error", { message: result.error || "Move failed", code: "INVALID_MOVE" });
@@ -28,21 +28,13 @@ export function registerGameHandlers(io: TypedServer, socket: TypedSocket) {
 
     if (!result.state) return;
 
-    // Broadcast move to all in the room
-    io.to(`room:${roomId}`).emit("game:moved", {
-      position,
-      player: result.state.moves[result.state.moves.length - 1].player,
-      nextTurn: result.state.currentTurn,
-      board: result.state.board,
-    });
+    // Broadcast move to all in the room (engine provides the payload)
+    if (result.movedPayload) {
+      io.to(`room:${roomId}`).emit("game:moved", result.movedPayload);
+    }
 
-    if (result.gameOver) {
-      io.to(`room:${roomId}`).emit("game:over", {
-        winner: result.winner ?? null,
-        reason: result.winner ? `${result.winner} wins!` : "Draw!",
-        finalBoard: result.state.board,
-        winningCells: result.winningCells ?? null,
-      });
+    if (result.gameOver && result.gameOverPayload) {
+      io.to(`room:${roomId}`).emit("game:over", result.gameOverPayload);
 
       // Persist to database
       await persistCompletedGame(result.state);
@@ -69,13 +61,8 @@ export function registerGameHandlers(io: TypedServer, socket: TypedSocket) {
 
     const result = await processForfeit(roomId, socket.data.userId);
 
-    if (result.success && result.state) {
-      io.to(`room:${roomId}`).emit("game:over", {
-        winner: result.winner ?? null,
-        reason: "Forfeit",
-        finalBoard: result.state.board,
-        winningCells: null,
-      });
+    if (result.success && result.state && result.gameOverPayload) {
+      io.to(`room:${roomId}`).emit("game:over", result.gameOverPayload);
 
       await persistCompletedGame(result.state);
 
@@ -119,7 +106,7 @@ export function registerGameHandlers(io: TypedServer, socket: TypedSocket) {
       return;
     }
 
-    // Both players want rematch — start new game with swapped marks
+    // Both players want rematch — start new game with swapped sides
     rematchOffers.delete(roomId);
 
     const newState = await createRematchState(roomId, room);

@@ -9,6 +9,7 @@ interface RoomCardProps {
 export function RoomCard({ room, onJoin }: RoomCardProps) {
   const isPlaying = room.status === "playing";
   const isFull = room.playerCount >= room.maxPlayers;
+  const isChess = room.gameType === "chess";
 
   return (
     <Pressable
@@ -22,6 +23,15 @@ export function RoomCard({ room, onJoin }: RoomCardProps) {
             <Text className="text-text-primary font-semibold text-base" numberOfLines={1}>
               {room.name}
             </Text>
+            <View
+              className={`px-1.5 py-0.5 rounded ${isChess ? "bg-amber-500/20" : "bg-blue-500/20"}`}
+            >
+              <Text
+                className={`text-[9px] font-bold ${isChess ? "text-amber-500" : "text-blue-500"}`}
+              >
+                {isChess ? "CHESS" : "TTT"}
+              </Text>
+            </View>
           </View>
           <Text className="text-text-secondary text-xs mt-1">Host: {room.hostName}</Text>
         </View>

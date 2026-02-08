@@ -1,14 +1,15 @@
-import type { Player } from "@ttt/shared";
+import type { ChessColor, GameType, Player, PlayerSide } from "@ttt/shared";
 import { Modal, Pressable, Text, View } from "react-native";
 
 interface GameOverModalProps {
   visible: boolean;
-  winner: Player | null;
-  myMark: Player | null;
+  winner: Player | ChessColor | null;
+  myMark: PlayerSide | null;
   iOfferedRematch: boolean;
   rematchOfferedBy: string | null;
   onRematch: () => void;
   onLeave: () => void;
+  gameType?: GameType;
 }
 
 export function GameOverModal({
@@ -19,26 +20,34 @@ export function GameOverModal({
   rematchOfferedBy,
   onRematch,
   onLeave,
+  gameType = "tic_tac_toe",
 }: GameOverModalProps) {
   const isDraw = winner === null;
   const iWon = winner === myMark;
   const isSpectator = myMark === null;
+  const isChess = gameType === "chess";
 
   let title = "Draw!";
-  let subtitle = "Well played by both sides";
+  let subtitle = isChess ? "Neither side could prevail" : "Well played by both sides";
   let titleColor = "text-text-primary";
 
   if (!isDraw) {
     if (isSpectator) {
-      title = `${winner} Wins!`;
-      subtitle = "Great game to watch";
-      titleColor = winner === "X" ? "text-accent-x" : "text-accent-o";
+      if (isChess) {
+        title = `${winner === "white" ? "White" : "Black"} Wins!`;
+        subtitle = "Great game to watch";
+        titleColor = winner === "white" ? "text-white" : "text-neutral-300";
+      } else {
+        title = `${winner} Wins!`;
+        subtitle = "Great game to watch";
+        titleColor = winner === "X" ? "text-accent-x" : "text-accent-o";
+      }
     } else if (iWon) {
-      title = "You Win!";
+      title = isChess ? "Checkmate!" : "You Win!";
       subtitle = "Excellent play!";
       titleColor = "text-green-500";
     } else {
-      title = "You Lose";
+      title = isChess ? "Checkmate" : "You Lose";
       subtitle = "Better luck next time";
       titleColor = "text-accent-o";
     }

@@ -19,7 +19,7 @@ import {
 type TypedSocket = Socket<ClientToServerEvents, ServerToClientEvents>;
 
 export function registerRoomHandlers(io: TypedServer, socket: TypedSocket) {
-  socket.on("room:create", async ({ name, password }, callback) => {
+  socket.on("room:create", async ({ name, password, gameType }, callback) => {
     // Guests cannot create rooms
     if (socket.data.isGuest) {
       return callback({ success: false, error: "Guests cannot create rooms. Please sign up!" });
@@ -50,6 +50,7 @@ export function registerRoomHandlers(io: TypedServer, socket: TypedSocket) {
         rating: socket.data.rating || 1000,
       },
       passwordHash,
+      gameType || "tic_tac_toe",
     );
 
     // Join Socket.IO room

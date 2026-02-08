@@ -12,10 +12,11 @@ import {
   verifyPassword,
 } from "../services/auth";
 import { sendPasswordResetEmail } from "../services/email";
+import { getUserRatings } from "../services/rating";
 
 // ─── Helpers ───────────────────────────────────────
 
-function toUserProfile(user: any) {
+function toUserProfile(user: any, ratings?: any[]) {
   return {
     id: user.id,
     email: user.email,
@@ -28,6 +29,14 @@ function toUserProfile(user: any) {
       losses: user.losses,
       draws: user.draws,
     },
+    ratings: ratings?.map((r: any) => ({
+      gameType: r.gameType === "TIC_TAC_TOE" ? "tic_tac_toe" : "chess",
+      rating: r.rating,
+      gamesPlayed: r.gamesPlayed,
+      wins: r.wins,
+      losses: r.losses,
+      draws: r.draws,
+    })),
   };
 }
 
@@ -270,9 +279,11 @@ export async function authRoutes(app: FastifyInstance) {
         });
       }
 
+      const ratings = await getUserRatings(userId);
+
       return {
         success: true,
-        data: toUserProfile(user),
+        data: toUserProfile(user, ratings),
       };
     },
   );

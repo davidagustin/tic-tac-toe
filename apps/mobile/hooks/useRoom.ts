@@ -1,3 +1,4 @@
+import type { MovePayload } from "@ttt/shared";
 import { useCallback, useEffect, useRef } from "react";
 import { getSocket } from "../services/socket";
 import { useAuthStore } from "../stores/authStore";
@@ -54,12 +55,16 @@ export function useRoom(roomId: string) {
       store.setCountdown(null);
     });
 
-    socket.on("game:moved", ({ position, player, nextTurn, board }) => {
-      gameStore.applyMove(position, player, nextTurn, board);
+    socket.on("game:moved", (data) => {
+      if (data.gameType === "tic_tac_toe") {
+        gameStore.applyTttMove(data.position, data.player, data.nextTurn, data.board);
+      } else if (data.gameType === "chess") {
+        gameStore.applyChessMove(data.fen, data.nextTurn, data.isCheck, data.from, data.to);
+      }
     });
 
-    socket.on("game:over", ({ winner, finalBoard, winningCells }) => {
-      gameStore.setGameOver(winner, finalBoard, winningCells);
+    socket.on("game:over", (payload) => {
+      gameStore.setGameOver(payload);
     });
 
     socket.on("game:rematch_offered", ({ userId }) => {
@@ -119,9 +124,9 @@ export function useRoom(roomId: string) {
     socket?.emit("room:chat", { text });
   }, []);
 
-  const makeMove = useCallback((position: number) => {
+  const makeMove = useCallback((payload: MovePayload) => {
     const socket = getSocket();
-    socket?.emit("game:move", { position });
+    socket?.emit("game:move", payload);
   }, []);
 
   const forfeit = useCallback(() => {

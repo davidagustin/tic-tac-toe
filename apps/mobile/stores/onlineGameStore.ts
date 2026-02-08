@@ -1,17 +1,32 @@
-import type { Board, GameStatus, OnlineGameState, Player } from "@ttt/shared";
+import type {
+  Board,
+  ChessColor,
+  GameOverPayload,
+  GameStatus,
+  OnlineGameState,
+  Player,
+  PlayerSide,
+} from "@ttt/shared";
 import { create } from "zustand";
 
 interface OnlineGameStoreState {
   gameState: OnlineGameState | null;
-  myMark: Player | null;
+  myMark: PlayerSide | null;
   isMyTurn: boolean;
   winningCells: number[] | null;
   rematchOfferedBy: string | null;
   iOfferedRematch: boolean;
 
   setGameState: (state: OnlineGameState, myUserId: string) => void;
-  applyMove: (position: number, player: Player, nextTurn: Player, board: Board) => void;
-  setGameOver: (winner: Player | null, finalBoard: Board, winningCells: number[] | null) => void;
+  applyTttMove: (position: number, player: Player, nextTurn: Player, board: Board) => void;
+  applyChessMove: (
+    fen: string,
+    nextTurn: ChessColor,
+    isCheck: boolean,
+    from: string,
+    to: string,
+  ) => void;
+  setGameOver: (payload: GameOverPayload) => void;
   setRematchOffered: (userId: string) => void;
   setIOfferedRematch: (offered: boolean) => void;
   reset: () => void;
@@ -26,46 +41,96 @@ export const useOnlineGameStore = create<OnlineGameStoreState>((set) => ({
   iOfferedRematch: false,
 
   setGameState: (state, myUserId) => {
-    const myMark: Player | null =
-      state.playerX.userId === myUserId ? "X" : state.playerO.userId === myUserId ? "O" : null;
+    let myMark: PlayerSide | null = null;
+
+    if (state.gameType === "tic_tac_toe") {
+      if (state.playerX.userId === myUserId) myMark = "X";
+      else if (state.playerO.userId === myUserId) myMark = "O";
+    } else {
+      if (state.playerWhite.userId === myUserId) myMark = "white";
+      else if (state.playerBlack.userId === myUserId) myMark = "black";
+    }
+
+    const isMyTurn =
+      state.gameType === "tic_tac_toe"
+        ? myMark === state.currentTurn
+        : myMark === state.currentTurn;
 
     set({
       gameState: state,
       myMark,
-      isMyTurn: myMark === state.currentTurn,
+      isMyTurn,
       winningCells: null,
       rematchOfferedBy: null,
       iOfferedRematch: false,
     });
   },
 
-  applyMove: (_position, _player, nextTurn, board) =>
-    set((state) => {
-      if (!state.gameState) return state;
+  applyTttMove: (_position, _player, nextTurn, board) =>
+    set((s) => {
+      if (!s.gameState || s.gameState.gameType !== "tic_tac_toe") return s;
       return {
         gameState: {
-          ...state.gameState,
+          ...s.gameState,
           board,
           currentTurn: nextTurn,
         },
-        isMyTurn: state.myMark === nextTurn,
+        isMyTurn: s.myMark === nextTurn,
       };
     }),
 
-  setGameOver: (winner, finalBoard, winningCells) =>
-    set((state) => {
-      if (!state.gameState) return state;
-      const status: GameStatus = winner === "X" ? "x_wins" : winner === "O" ? "o_wins" : "draw";
-
+  applyChessMove: (fen, nextTurn, isCheck, from, to) =>
+    set((s) => {
+      if (!s.gameState || s.gameState.gameType !== "chess") return s;
       return {
         gameState: {
-          ...state.gameState,
-          board: finalBoard,
-          status,
+          ...s.gameState,
+          fen,
+          currentTurn: nextTurn,
+          isCheck,
+          lastMove: { from, to },
         },
-        isMyTurn: false,
-        winningCells,
+        isMyTurn: s.myMark === nextTurn,
       };
+    }),
+
+  setGameOver: (payload) =>
+    set((s) => {
+      if (!s.gameState) return s;
+
+      if (payload.gameType === "tic_tac_toe" && s.gameState.gameType === "tic_tac_toe") {
+        const status: GameStatus =
+          payload.winner === "X" ? "x_wins" : payload.winner === "O" ? "o_wins" : "draw";
+        return {
+          gameState: {
+            ...s.gameState,
+            board: payload.finalBoard,
+            status,
+          },
+          isMyTurn: false,
+          winningCells: payload.winningCells,
+        };
+      }
+
+      if (payload.gameType === "chess" && s.gameState.gameType === "chess") {
+        const status: GameStatus =
+          payload.winner === "white"
+            ? "white_wins"
+            : payload.winner === "black"
+              ? "black_wins"
+              : "draw";
+        return {
+          gameState: {
+            ...s.gameState,
+            fen: payload.finalFen,
+            pgn: payload.pgn,
+            status,
+          },
+          isMyTurn: false,
+        };
+      }
+
+      return s;
     }),
 
   setRematchOffered: (userId) => set({ rematchOfferedBy: userId }),

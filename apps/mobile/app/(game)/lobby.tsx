@@ -1,6 +1,6 @@
-import type { RoomInfo } from "@ttt/shared";
+import type { GameType, RoomInfo } from "@ttt/shared";
 import { router } from "expo-router";
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { FlatList, Linking, Pressable, Text, View } from "react-native";
 import { CryptoDonations } from "../../components/CryptoDonations";
 import { ChatPanel } from "../../components/chat/ChatPanel";
@@ -13,6 +13,7 @@ import { useAuthStore } from "../../stores/authStore";
 const STRIPE_DONATE_URL = "https://buy.stripe.com/fZucN5epreyuchqdtZfnO00";
 
 type Tab = "rooms" | "chat";
+type GameFilter = "all" | GameType;
 
 export default function LobbyScreen() {
   const { user, isGuest, logout } = useAuthStore();
@@ -22,11 +23,17 @@ export default function LobbyScreen() {
   const [activeTab, setActiveTab] = useState<Tab>("rooms");
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
+  const [gameFilter, setGameFilter] = useState<GameFilter>("all");
 
   // Password modal state
   const [passwordRoom, setPasswordRoom] = useState<RoomInfo | null>(null);
   const [passwordError, setPasswordError] = useState("");
   const [isJoining, setIsJoining] = useState(false);
+
+  const filteredRooms = useMemo(() => {
+    if (gameFilter === "all") return rooms;
+    return rooms.filter((r) => r.gameType === gameFilter);
+  }, [rooms, gameFilter]);
 
   const handleLogout = async () => {
     await logout();
@@ -34,9 +41,9 @@ export default function LobbyScreen() {
   };
 
   const handleCreateRoom = useCallback(
-    async (name: string, password?: string) => {
+    async (name: string, password?: string, gameType?: GameType) => {
       setIsCreating(true);
-      const result = await createRoom(name, password);
+      const result = await createRoom(name, password, gameType);
       setIsCreating(false);
 
       if (result.success && result.roomId) {
@@ -91,6 +98,10 @@ export default function LobbyScreen() {
     [handleJoinRoom],
   );
 
+  // Per-game ratings
+  const tttRating = user?.ratings?.find((r) => r.gameType === "tic_tac_toe");
+  const chessRating = user?.ratings?.find((r) => r.gameType === "chess");
+
   return (
     <View className="flex-1 bg-bg-primary">
       {/* Header */}
@@ -115,16 +126,28 @@ export default function LobbyScreen() {
           </View>
         </View>
 
-        {/* Rating card */}
+        {/* Per-game rating cards */}
         <View className="flex-row gap-3 mb-4">
           <View className="flex-1 bg-bg-card rounded-xl p-3 border border-neutral-800">
-            <Text className="text-text-muted text-xs">Rating</Text>
-            <Text className="text-accent-primary text-2xl font-bold">{user?.rating || 1000}</Text>
+            <View className="flex-row items-center gap-1.5 mb-1">
+              <View className="w-2 h-2 rounded-full bg-blue-500" />
+              <Text className="text-text-muted text-xs">Tic-Tac-Toe</Text>
+            </View>
+            <Text className="text-blue-500 text-2xl font-bold">
+              {tttRating?.rating ?? user?.rating ?? 1000}
+            </Text>
+            <Text className="text-text-muted text-[10px]">
+              {tttRating?.gamesPlayed ?? user?.stats.gamesPlayed ?? 0} games
+            </Text>
           </View>
           <View className="flex-1 bg-bg-card rounded-xl p-3 border border-neutral-800">
-            <Text className="text-text-muted text-xs">Games</Text>
-            <Text className="text-text-primary text-2xl font-bold">
-              {user?.stats.gamesPlayed || 0}
+            <View className="flex-row items-center gap-1.5 mb-1">
+              <View className="w-2 h-2 rounded-full bg-amber-500" />
+              <Text className="text-text-muted text-xs">Chess</Text>
+            </View>
+            <Text className="text-amber-500 text-2xl font-bold">{chessRating?.rating ?? 1000}</Text>
+            <Text className="text-text-muted text-[10px]">
+              {chessRating?.gamesPlayed ?? 0} games
             </Text>
           </View>
         </View>
@@ -161,7 +184,7 @@ export default function LobbyScreen() {
             <Text
               className={`font-semibold text-sm ${activeTab === "rooms" ? "text-text-primary" : "text-text-muted"}`}
             >
-              Rooms ({rooms.length})
+              Rooms ({filteredRooms.length})
             </Text>
           </Pressable>
           <Pressable
@@ -175,12 +198,43 @@ export default function LobbyScreen() {
             </Text>
           </Pressable>
         </View>
+
+        {/* Game filter tabs */}
+        {activeTab === "rooms" && (
+          <View className="flex-row gap-2 mt-3">
+            {(
+              [
+                { key: "all", label: "All" },
+                { key: "tic_tac_toe", label: "Tic-Tac-Toe" },
+                { key: "chess", label: "Chess" },
+              ] as const
+            ).map((filter) => (
+              <Pressable
+                key={filter.key}
+                className={`px-3 py-1.5 rounded-full ${
+                  gameFilter === filter.key
+                    ? "bg-accent-primary"
+                    : "bg-bg-card border border-neutral-800"
+                }`}
+                onPress={() => setGameFilter(filter.key)}
+              >
+                <Text
+                  className={`text-xs font-semibold ${
+                    gameFilter === filter.key ? "text-text-primary" : "text-text-muted"
+                  }`}
+                >
+                  {filter.label}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        )}
       </View>
 
       {/* Content */}
       {activeTab === "rooms" ? (
         <FlatList
-          data={rooms}
+          data={filteredRooms}
           keyExtractor={(item) => item.id}
           renderItem={renderRoom}
           contentContainerClassName="px-6 pb-6 gap-3"

@@ -3,7 +3,22 @@
 export type Player = "X" | "O";
 export type CellValue = Player | null;
 export type Board = CellValue[]; // length 9, indices 0-8
-export type GameStatus = "waiting" | "in_progress" | "x_wins" | "o_wins" | "draw" | "abandoned";
+
+// ─── Multi-Game Types ─────────────────────────────────
+
+export type GameType = "tic_tac_toe" | "chess";
+export type ChessColor = "white" | "black";
+export type PlayerSide = Player | ChessColor;
+
+export type GameStatus =
+  | "waiting"
+  | "in_progress"
+  | "x_wins"
+  | "o_wins"
+  | "draw"
+  | "abandoned"
+  | "white_wins"
+  | "black_wins";
 
 export interface GameState {
   id: string;
@@ -19,6 +34,18 @@ export interface GameState {
 export interface GameMove {
   player: Player;
   position: number; // 0-8
+  moveNum: number;
+  timestamp: string;
+}
+
+// ─── Chess Move ───────────────────────────────────────
+
+export interface ChessGameMove {
+  color: ChessColor;
+  from: string; // e.g. "e2"
+  to: string; // e.g. "e4"
+  san: string; // standard algebraic notation e.g. "e4", "Nf3"
+  promotion?: string; // "q" | "r" | "b" | "n"
   moveNum: number;
   timestamp: string;
 }
@@ -49,6 +76,18 @@ export interface UserProfile {
     losses: number;
     draws: number;
   };
+  ratings?: UserRatingInfo[];
+}
+
+// ─── Per-Game Rating ──────────────────────────────────
+
+export interface UserRatingInfo {
+  gameType: GameType;
+  rating: number;
+  gamesPlayed: number;
+  wins: number;
+  losses: number;
+  draws: number;
 }
 
 // ─── API Types ─────────────────────────────────────────
@@ -70,7 +109,7 @@ export interface RoomMember {
   role: RoomRole;
   isReady: boolean;
   isConnected: boolean;
-  mark?: Player; // only for players
+  mark?: PlayerSide; // "X"/"O" for TTT, "white"/"black" for chess
 }
 
 export interface RoomInfo {
@@ -85,6 +124,7 @@ export interface RoomInfo {
   maxSpectators: number;
   status: "waiting" | "playing";
   createdAt: string;
+  gameType: GameType;
 }
 
 export interface RoomDetail {
@@ -97,6 +137,7 @@ export interface RoomDetail {
   spectators: RoomMember[];
   createdAt: string;
   expiresAt: string;
+  gameType: GameType;
 }
 
 export interface ChatMessage {
@@ -108,7 +149,10 @@ export interface ChatMessage {
   channel: "lobby" | "room";
 }
 
-export interface OnlineGameState {
+// ─── Discriminated Game States ────────────────────────
+
+export interface TttOnlineGameState {
+  gameType: "tic_tac_toe";
   roomId: string;
   board: Board;
   currentTurn: Player;
@@ -118,6 +162,66 @@ export interface OnlineGameState {
   moves: GameMove[];
   startedAt: string;
 }
+
+export interface ChessOnlineGameState {
+  gameType: "chess";
+  roomId: string;
+  fen: string;
+  pgn: string;
+  currentTurn: ChessColor;
+  status: GameStatus;
+  playerWhite: RoomMember;
+  playerBlack: RoomMember;
+  moves: ChessGameMove[];
+  startedAt: string;
+  isCheck: boolean;
+  lastMove?: { from: string; to: string };
+  capturedPieces: { white: string[]; black: string[] };
+}
+
+export type OnlineGameState = TttOnlineGameState | ChessOnlineGameState;
+
+// ─── Polymorphic Socket Payloads ──────────────────────
+
+export type MovePayload =
+  | { gameType: "tic_tac_toe"; position: number }
+  | { gameType: "chess"; from: string; to: string; promotion?: string };
+
+export type MovedPayload =
+  | {
+      gameType: "tic_tac_toe";
+      position: number;
+      player: Player;
+      nextTurn: Player;
+      board: Board;
+    }
+  | {
+      gameType: "chess";
+      from: string;
+      to: string;
+      san: string;
+      color: ChessColor;
+      nextTurn: ChessColor;
+      fen: string;
+      isCheck: boolean;
+      promotion?: string;
+    };
+
+export type GameOverPayload =
+  | {
+      gameType: "tic_tac_toe";
+      winner: Player | null;
+      reason: string;
+      finalBoard: Board;
+      winningCells: number[] | null;
+    }
+  | {
+      gameType: "chess";
+      winner: ChessColor | null;
+      reason: string;
+      finalFen: string;
+      pgn: string;
+    };
 
 // ─── Socket.IO Typed Event Maps ───────────────────────
 
@@ -129,7 +233,7 @@ export interface ClientToServerEvents {
 
   // Room
   "room:create": (
-    data: { name: string; password?: string },
+    data: { name: string; password?: string; gameType?: GameType },
     callback: (response: { success: boolean; roomId?: string; error?: string }) => void,
   ) => void;
   "room:join": (
@@ -142,7 +246,7 @@ export interface ClientToServerEvents {
   "room:chat": (data: { text: string }) => void;
 
   // Game
-  "game:move": (data: { position: number }) => void;
+  "game:move": (data: MovePayload) => void;
   "game:forfeit": () => void;
   "game:rematch": () => void;
 }
@@ -169,18 +273,8 @@ export interface ServerToClientEvents {
 
   // Game
   "game:state": (state: OnlineGameState) => void;
-  "game:moved": (data: {
-    position: number;
-    player: Player;
-    nextTurn: Player;
-    board: Board;
-  }) => void;
-  "game:over": (data: {
-    winner: Player | null;
-    reason: string;
-    finalBoard: Board;
-    winningCells: number[] | null;
-  }) => void;
+  "game:moved": (data: MovedPayload) => void;
+  "game:over": (data: GameOverPayload) => void;
   "game:rematch_offered": (data: { userId: string }) => void;
   "game:rematch_start": (state: OnlineGameState) => void;
 
