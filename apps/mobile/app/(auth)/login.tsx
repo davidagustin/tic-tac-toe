@@ -71,6 +71,14 @@ export default function LoginScreen() {
         />
       </View>
 
+      <View className="items-end mb-4">
+        <Link href="/(auth)/forgot-password" asChild>
+          <Pressable>
+            <Text className="text-text-muted text-sm">Forgot password?</Text>
+          </Pressable>
+        </Link>
+      </View>
+
       <Pressable
         className={`bg-accent-primary py-4 rounded-2xl items-center mb-4 ${isLoading ? "opacity-60" : "active:opacity-80"}`}
         onPress={handleLogin}

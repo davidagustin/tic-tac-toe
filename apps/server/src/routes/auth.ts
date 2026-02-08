@@ -3,11 +3,15 @@ import { z } from "zod";
 import { prisma } from "../lib/prisma";
 import {
   createRefreshToken,
+  generateResetCode,
   hashPassword,
+  resetPassword,
   revokeRefreshToken,
   validateRefreshToken,
+  validateResetCode,
   verifyPassword,
 } from "../services/auth";
+import { sendPasswordResetEmail } from "../services/email";
 
 // ─── Helpers ───────────────────────────────────────
 
@@ -38,6 +42,16 @@ const registerSchema = z.object({
 const loginSchema = z.object({
   email: z.string().email(),
   password: z.string(),
+});
+
+const forgotPasswordSchema = z.object({
+  email: z.string().email(),
+});
+
+const resetPasswordSchema = z.object({
+  email: z.string().email(),
+  code: z.string().length(6),
+  newPassword: z.string().min(8).max(128),
 });
 
 // ─── Routes ────────────────────────────────────────
@@ -259,6 +273,81 @@ export async function authRoutes(app: FastifyInstance) {
       return {
         success: true,
         data: toUserProfile(user),
+      };
+    },
+  );
+
+  // ── Forgot Password ────────────────────────────
+  app.post(
+    "/api/auth/forgot-password",
+    {
+      config: { rateLimit: { max: 3, timeWindow: "1 minute" } },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const result = forgotPasswordSchema.safeParse(request.body);
+      if (!result.success) {
+        return reply.status(400).send({
+          success: false,
+          error: "Invalid input",
+        });
+      }
+
+      const email = result.data.email.toLowerCase();
+
+      // Always respond the same way to prevent user enumeration
+      const user = await prisma.user.findUnique({ where: { email } });
+      if (user) {
+        const code = await generateResetCode(email);
+        await sendPasswordResetEmail(email, code).catch((err) => {
+          console.error("[Auth] Failed to send reset email:", err);
+        });
+      }
+
+      return {
+        success: true,
+        message: "If an account exists with this email, a reset code has been sent",
+      };
+    },
+  );
+
+  // ── Reset Password ─────────────────────────────
+  app.post(
+    "/api/auth/reset-password",
+    {
+      config: { rateLimit: { max: 5, timeWindow: "1 minute" } },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const result = resetPasswordSchema.safeParse(request.body);
+      if (!result.success) {
+        return reply.status(400).send({
+          success: false,
+          error: "Invalid input",
+          details: result.error.flatten().fieldErrors,
+        });
+      }
+
+      const { code, newPassword } = result.data;
+      const email = result.data.email.toLowerCase();
+
+      const valid = await validateResetCode(email, code);
+      if (!valid) {
+        return reply.status(400).send({
+          success: false,
+          error: "Invalid or expired reset code",
+        });
+      }
+
+      const updated = await resetPassword(email, newPassword);
+      if (!updated) {
+        return reply.status(400).send({
+          success: false,
+          error: "Failed to reset password",
+        });
+      }
+
+      return {
+        success: true,
+        message: "Password has been reset successfully",
       };
     },
   );

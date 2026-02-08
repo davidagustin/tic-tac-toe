@@ -120,4 +120,14 @@ export async function getMe() {
   return data;
 }
 
+export async function forgotPassword(email: string) {
+  const { data } = await api.post("/api/auth/forgot-password", { email });
+  return data;
+}
+
+export async function resetPassword(email: string, code: string, newPassword: string) {
+  const { data } = await api.post("/api/auth/reset-password", { email, code, newPassword });
+  return data;
+}
+
 export { api };

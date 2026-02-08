@@ -1,6 +1,8 @@
 import crypto from "node:crypto";
+import { REDIS_KEYS } from "@ttt/shared";
 import bcrypt from "bcryptjs";
 import { prisma } from "../lib/prisma";
+import { getRedis } from "../lib/redis";
 
 const SALT_ROUNDS = 12;
 
@@ -59,4 +61,37 @@ export async function cleanupExpiredTokens(): Promise<number> {
     where: { expiresAt: { lt: new Date() } },
   });
   return result.count;
+}
+
+const RESET_CODE_TTL = 600; // 10 minutes
+
+export async function generateResetCode(email: string): Promise<string> {
+  const code = Math.floor(100000 + Math.random() * 900000).toString();
+  const redis = getRedis();
+  const key = `${REDIS_KEYS.PASSWORD_RESET}${email.toLowerCase()}`;
+  await redis.set(key, code, "EX", RESET_CODE_TTL);
+  return code;
+}
+
+export async function validateResetCode(email: string, code: string): Promise<boolean> {
+  const redis = getRedis();
+  const key = `${REDIS_KEYS.PASSWORD_RESET}${email.toLowerCase()}`;
+  const stored = await redis.get(key);
+  if (!stored || stored !== code) return false;
+  await redis.del(key);
+  return true;
+}
+
+export async function resetPassword(email: string, newPassword: string): Promise<boolean> {
+  const user = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
+  if (!user) return false;
+
+  const passwordHash = await hashPassword(newPassword);
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { passwordHash },
+  });
+
+  await revokeAllUserTokens(user.id);
+  return true;
 }

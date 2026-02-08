@@ -59,6 +59,7 @@ export const REDIS_KEYS = {
   GAME_STATE: "game:state:",
   USER_ROOM: "user:room:",
   CHAT_RATE: "chat:rate:",
+  PASSWORD_RESET: "password_reset:",
 } as const;
 
 // ─── API Routes ────────────────────────────────────────
@@ -71,6 +72,8 @@ export const API_ROUTES = {
     LOGOUT: "/api/auth/logout",
     GOOGLE: "/api/auth/google",
     GITHUB: "/api/auth/github",
+    FORGOT_PASSWORD: "/api/auth/forgot-password",
+    RESET_PASSWORD: "/api/auth/reset-password",
   },
   USER: {
     PROFILE: "/api/user/profile",
