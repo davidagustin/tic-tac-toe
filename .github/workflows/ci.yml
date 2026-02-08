@@ -124,6 +124,10 @@ jobs:
             sleep 10
             docker exec ttt-app npx prisma migrate deploy
 
+            # Clear stale lobby chat from Redis
+            source ~/app/.env
+            docker exec ttt-redis redis-cli -a "$REDIS_PASSWORD" DEL lobby:chat || true
+
             # Health check
             sleep 5
             if curl -skf https://localhost/api/health > /dev/null; then
