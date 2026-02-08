@@ -203,18 +203,22 @@ export default function LobbyScreen() {
         <ChatPanel messages={chatMessages} onSend={sendChat} myUserId={user?.id || ""} />
       )}
 
-      {/* Footer */}
-      <View className="flex-row justify-center items-center gap-2 pb-4 opacity-50">
-        <Pressable
-          onPress={() => Linking.openURL(STRIPE_DONATE_URL)}
-          className="active:opacity-80"
-          hitSlop={12}
-        >
-          <View className="w-6 h-6 rounded-full items-center justify-center bg-[#635bff]">
-            <Text className="text-white text-[9px] font-bold">S</Text>
-          </View>
-        </Pressable>
-        <CryptoDonations />
+      {/* Support footer */}
+      <View className="items-center pb-5 pt-2 px-6">
+        <Text className="text-text-muted text-xs mb-2">Support is always appreciated</Text>
+        <View className="flex-row items-center gap-3">
+          <Pressable
+            onPress={() => Linking.openURL(STRIPE_DONATE_URL)}
+            className="flex-row items-center gap-1.5 bg-bg-card border border-neutral-800 px-3 py-1.5 rounded-full active:opacity-70"
+            hitSlop={8}
+          >
+            <View className="w-4 h-4 rounded-full items-center justify-center bg-[#635bff]">
+              <Text className="text-white text-[7px] font-bold">S</Text>
+            </View>
+            <Text className="text-text-muted text-xs">Tip</Text>
+          </Pressable>
+          <CryptoDonations />
+        </View>
       </View>
 
       {/* Modals */}

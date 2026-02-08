@@ -40,13 +40,18 @@ function WalletRow({ wallet }: { wallet: WalletAddress }) {
   const _truncated = `${wallet.address.slice(0, 8)}...${wallet.address.slice(-6)}`;
 
   return (
-    <Pressable onPress={handleCopy} className="active:opacity-80">
+    <Pressable
+      onPress={handleCopy}
+      className="flex-row items-center gap-1.5 bg-bg-card border border-neutral-800 px-3 py-1.5 rounded-full active:opacity-70"
+      hitSlop={8}
+    >
       <View
         style={{ backgroundColor: copied ? "#22c55e" : wallet.color }}
-        className="w-6 h-6 rounded-full items-center justify-center"
+        className="w-4 h-4 rounded-full items-center justify-center"
       >
-        <Text className="text-white text-[9px] font-bold">{copied ? "\u2713" : wallet.symbol}</Text>
+        <Text className="text-white text-[7px] font-bold">{copied ? "\u2713" : wallet.symbol}</Text>
       </View>
+      <Text className="text-text-muted text-xs">{copied ? "Copied" : wallet.symbol}</Text>
     </Pressable>
   );
 }
