@@ -35,6 +35,11 @@ export function connectSocket(
     reconnectionDelayMax: 5000,
   }) as TypedSocket;
 
+  // Sync server-assigned guest ID with the auth store
+  socket.on("auth:guest-id", (serverId: string) => {
+    useAuthStore.getState().updateGuestId(serverId);
+  });
+
   socket.on("connect", () => {
     if (__DEV__) console.log("[Socket] Connected:", socket?.id);
   });

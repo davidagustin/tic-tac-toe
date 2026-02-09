@@ -12,12 +12,13 @@ interface AuthState {
   register: (email: string, password: string, name: string) => Promise<boolean>;
   login: (email: string, password: string) => Promise<boolean>;
   loginAsGuest: () => void;
+  updateGuestId: (serverId: string) => void;
   logout: () => Promise<void>;
   loadUser: () => Promise<void>;
   clearError: () => void;
 }
 
-export const useAuthStore = create<AuthState>((set) => ({
+export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   isAuthenticated: false,
   isGuest: false,
@@ -71,6 +72,13 @@ export const useAuthStore = create<AuthState>((set) => ({
       isLoading: false,
       error: null,
     });
+  },
+
+  updateGuestId: (serverId: string) => {
+    const state = get();
+    if (state.isGuest && state.user) {
+      set({ user: { ...state.user, id: serverId } });
+    }
   },
 
   logout: async () => {
