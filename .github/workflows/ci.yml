@@ -45,6 +45,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Login to DHI registry
+        run: echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login dhi.io -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
+
       - name: Build server Docker image
         run: docker build -f apps/server/Dockerfile -t ttt-server:test .
 
@@ -65,6 +68,9 @@ jobs:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Login to DHI registry
+        run: echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login dhi.io -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
 
       - name: Login to Amazon ECR
         id: login-ecr
@@ -125,7 +131,7 @@ jobs:
 
             # Run database migrations (wait for postgres health check)
             sleep 10
-            docker exec ttt-app npx prisma migrate deploy
+            docker exec ttt-app node /app/node_modules/prisma/build/index.js migrate deploy
 
             # Clear stale lobby chat from Redis
             source ~/app/.env
