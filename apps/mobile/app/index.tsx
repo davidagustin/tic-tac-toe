@@ -26,6 +26,13 @@ export default function HomeScreen() {
         </Pressable>
 
         <Pressable
+          className="bg-bg-card border border-accent-primary py-4 rounded-2xl items-center active:opacity-80"
+          onPress={() => router.push("/(computer)/setup")}
+        >
+          <Text className="text-accent-primary text-lg font-semibold">Play vs Computer</Text>
+        </Pressable>
+
+        <Pressable
           className="bg-bg-card border border-neutral-800 py-4 rounded-2xl items-center active:opacity-80"
           onPress={handleGuestMode}
         >
