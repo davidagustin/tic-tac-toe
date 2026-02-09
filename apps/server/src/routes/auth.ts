@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { prisma } from "../lib/prisma";
@@ -63,6 +64,27 @@ const resetPasswordSchema = z.object({
   newPassword: z.string().min(8).max(128),
 });
 
+function setAuthCookies(reply: FastifyReply, accessToken: string) {
+  const isProduction = process.env.NODE_ENV === "production";
+
+  reply.setCookie("accessToken", accessToken, {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: "lax",
+    path: "/api",
+    maxAge: 15 * 60,
+  });
+
+  const csrfToken = crypto.randomBytes(32).toString("hex");
+  reply.setCookie("csrfToken", csrfToken, {
+    httpOnly: false,
+    secure: isProduction,
+    sameSite: "lax",
+    path: "/",
+    maxAge: 15 * 60,
+  });
+}
+
 // ─── Routes ────────────────────────────────────────
 
 export async function authRoutes(app: FastifyInstance) {
@@ -124,6 +146,8 @@ export async function authRoutes(app: FastifyInstance) {
         path: "/api/auth",
         maxAge: 7 * 24 * 60 * 60, // 7 days
       });
+
+      setAuthCookies(reply, accessToken);
 
       return reply.status(201).send({
         success: true,
@@ -192,6 +216,8 @@ export async function authRoutes(app: FastifyInstance) {
         maxAge: 7 * 24 * 60 * 60,
       });
 
+      setAuthCookies(reply, accessToken);
+
       return {
         success: true,
         data: {
@@ -243,6 +269,8 @@ export async function authRoutes(app: FastifyInstance) {
         maxAge: 7 * 24 * 60 * 60,
       });
 
+      setAuthCookies(reply, accessToken);
+
       return {
         success: true,
         data: { accessToken, refreshToken: newRefreshToken },
@@ -258,6 +286,8 @@ export async function authRoutes(app: FastifyInstance) {
     }
 
     reply.clearCookie("refreshToken", { path: "/api/auth" });
+    reply.clearCookie("accessToken", { path: "/api" });
+    reply.clearCookie("csrfToken", { path: "/" });
 
     return { success: true };
   });

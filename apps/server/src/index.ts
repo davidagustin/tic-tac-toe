@@ -60,7 +60,35 @@ async function main() {
     try {
       await request.jwtVerify();
     } catch (_err) {
-      reply.status(401).send({ success: false, error: "Unauthorized" });
+      const cookieToken = request.cookies?.accessToken;
+      if (!cookieToken) {
+        return reply.status(401).send({ success: false, error: "Unauthorized" });
+      }
+      try {
+        request.user = app.jwt.verify(cookieToken);
+      } catch {
+        return reply.status(401).send({ success: false, error: "Unauthorized" });
+      }
+    }
+  });
+
+  // ─── CSRF Protection for Cookie Auth ───────────────
+  app.addHook("onRequest", async (request, reply) => {
+    if (["GET", "HEAD", "OPTIONS"].includes(request.method)) return;
+
+    // Skip CSRF for auth routes (login/register have no cookie yet,
+    // refresh/logout are protected by their own token validation)
+    if (request.url.startsWith("/api/auth/")) return;
+
+    const hasBearerHeader = request.headers.authorization?.startsWith("Bearer ");
+    const hasCookieToken = !!request.cookies?.accessToken;
+
+    if (hasCookieToken && !hasBearerHeader) {
+      const csrfHeader = request.headers["x-csrf-token"] as string | undefined;
+      const csrfCookie = request.cookies?.csrfToken;
+      if (!csrfHeader || !csrfCookie || csrfHeader !== csrfCookie) {
+        return reply.status(403).send({ success: false, error: "CSRF validation failed" });
+      }
     }
   });
 
