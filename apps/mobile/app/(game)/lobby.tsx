@@ -104,189 +104,193 @@ export default function LobbyScreen() {
 
   return (
     <View className="flex-1 bg-bg-primary">
-      {/* Header */}
-      <View className="px-6 pt-16 pb-4">
-        <View className="flex-row justify-between items-center mb-4">
-          <View>
-            <Text className="text-text-secondary text-sm">
-              {isGuest ? "Playing as guest" : "Welcome back"}
-            </Text>
-            <Text className="text-text-primary text-2xl font-bold">{user?.name}</Text>
-          </View>
-          <View className="flex-row items-center gap-4">
-            <View className="flex-row items-center gap-1.5">
-              <View
-                className={`w-2 h-2 rounded-full ${isConnected ? "bg-green-500" : "bg-red-500"}`}
-              />
-              <Text className="text-text-muted text-xs">{onlineCount} online</Text>
+      <View className="flex-1 w-full max-w-3xl self-center">
+        {/* Header */}
+        <View className="px-6 pt-16 pb-4">
+          <View className="flex-row justify-between items-center mb-4">
+            <View>
+              <Text className="text-text-secondary text-sm">
+                {isGuest ? "Playing as guest" : "Welcome back"}
+              </Text>
+              <Text className="text-text-primary text-2xl font-bold">{user?.name}</Text>
             </View>
-            <Pressable onPress={handleLogout} className="active:opacity-60">
-              <Text className="text-text-secondary">{isGuest ? "Exit" : "Logout"}</Text>
-            </Pressable>
-          </View>
-        </View>
-
-        {/* Per-game rating cards */}
-        <View className="flex-row gap-3 mb-4">
-          <View className="flex-1 bg-bg-card rounded-xl p-3 border border-neutral-800">
-            <View className="flex-row items-center gap-1.5 mb-1">
-              <View className="w-2 h-2 rounded-full bg-blue-500" />
-              <Text className="text-text-muted text-xs">Tic-Tac-Toe</Text>
+            <View className="flex-row items-center gap-4">
+              <View className="flex-row items-center gap-1.5">
+                <View
+                  className={`w-2 h-2 rounded-full ${isConnected ? "bg-green-500" : "bg-red-500"}`}
+                />
+                <Text className="text-text-muted text-xs">{onlineCount} online</Text>
+              </View>
+              <Pressable onPress={handleLogout} className="active:opacity-60">
+                <Text className="text-text-secondary">{isGuest ? "Exit" : "Logout"}</Text>
+              </Pressable>
             </View>
-            <Text className="text-blue-500 text-2xl font-bold">
-              {tttRating?.rating ?? user?.rating ?? 1000}
-            </Text>
-            <Text className="text-text-muted text-[10px]">
-              {tttRating?.gamesPlayed ?? user?.stats.gamesPlayed ?? 0} games
-            </Text>
           </View>
-          <View className="flex-1 bg-bg-card rounded-xl p-3 border border-neutral-800">
-            <View className="flex-row items-center gap-1.5 mb-1">
-              <View className="w-2 h-2 rounded-full bg-amber-500" />
-              <Text className="text-text-muted text-xs">Chess</Text>
+
+          {/* Per-game rating cards */}
+          <View className="flex-row gap-3 mb-4">
+            <View className="flex-1 bg-bg-card rounded-xl p-3 border border-neutral-800">
+              <View className="flex-row items-center gap-1.5 mb-1">
+                <View className="w-2 h-2 rounded-full bg-blue-500" />
+                <Text className="text-text-muted text-xs">Tic-Tac-Toe</Text>
+              </View>
+              <Text className="text-blue-500 text-2xl font-bold">
+                {tttRating?.rating ?? user?.rating ?? 1000}
+              </Text>
+              <Text className="text-text-muted text-[10px]">
+                {tttRating?.gamesPlayed ?? user?.stats.gamesPlayed ?? 0} games
+              </Text>
             </View>
-            <Text className="text-amber-500 text-2xl font-bold">{chessRating?.rating ?? 1000}</Text>
-            <Text className="text-text-muted text-[10px]">
-              {chessRating?.gamesPlayed ?? 0} games
-            </Text>
+            <View className="flex-1 bg-bg-card rounded-xl p-3 border border-neutral-800">
+              <View className="flex-row items-center gap-1.5 mb-1">
+                <View className="w-2 h-2 rounded-full bg-amber-500" />
+                <Text className="text-text-muted text-xs">Chess</Text>
+              </View>
+              <Text className="text-amber-500 text-2xl font-bold">
+                {chessRating?.rating ?? 1000}
+              </Text>
+              <Text className="text-text-muted text-[10px]">
+                {chessRating?.gamesPlayed ?? 0} games
+              </Text>
+            </View>
           </View>
-        </View>
 
-        {isGuest && (
-          <Pressable
-            className="bg-accent-primary/20 border border-accent-primary rounded-xl p-3 mb-4 active:opacity-80"
-            onPress={() => router.push("/(auth)/register")}
-          >
-            <Text className="text-accent-primary text-center text-sm font-semibold">
-              Create an account to create rooms and save progress
-            </Text>
-          </Pressable>
-        )}
-
-        {/* Action buttons */}
-        <View className="flex-row gap-3 mb-4">
-          {!isGuest && (
+          {isGuest && (
             <Pressable
-              className="flex-1 bg-accent-primary py-3 rounded-xl items-center active:opacity-80"
-              onPress={() => setShowCreateModal(true)}
+              className="bg-accent-primary/20 border border-accent-primary rounded-xl p-3 mb-4 active:opacity-80"
+              onPress={() => router.push("/(auth)/register")}
             >
-              <Text className="text-text-primary font-semibold">Create Room</Text>
+              <Text className="text-accent-primary text-center text-sm font-semibold">
+                Create an account to create rooms and save progress
+              </Text>
             </Pressable>
+          )}
+
+          {/* Action buttons */}
+          <View className="flex-row gap-3 mb-4">
+            {!isGuest && (
+              <Pressable
+                className="flex-1 bg-accent-primary py-3 rounded-xl items-center active:opacity-80"
+                onPress={() => setShowCreateModal(true)}
+              >
+                <Text className="text-text-primary font-semibold">Create Room</Text>
+              </Pressable>
+            )}
+          </View>
+
+          {/* Tabs */}
+          <View className="flex-row bg-bg-card rounded-xl border border-neutral-800 p-1">
+            <Pressable
+              className={`flex-1 py-2 rounded-lg items-center ${activeTab === "rooms" ? "bg-bg-secondary" : ""}`}
+              onPress={() => setActiveTab("rooms")}
+            >
+              <Text
+                className={`font-semibold text-sm ${activeTab === "rooms" ? "text-text-primary" : "text-text-muted"}`}
+              >
+                Rooms ({filteredRooms.length})
+              </Text>
+            </Pressable>
+            <Pressable
+              className={`flex-1 py-2 rounded-lg items-center ${activeTab === "chat" ? "bg-bg-secondary" : ""}`}
+              onPress={() => setActiveTab("chat")}
+            >
+              <Text
+                className={`font-semibold text-sm ${activeTab === "chat" ? "text-text-primary" : "text-text-muted"}`}
+              >
+                Lobby Chat
+              </Text>
+            </Pressable>
+          </View>
+
+          {/* Game filter tabs */}
+          {activeTab === "rooms" && (
+            <View className="flex-row gap-2 mt-3">
+              {(
+                [
+                  { key: "all", label: "All" },
+                  { key: "tic_tac_toe", label: "Tic-Tac-Toe" },
+                  { key: "chess", label: "Chess" },
+                ] as const
+              ).map((filter) => (
+                <Pressable
+                  key={filter.key}
+                  className={`px-3 py-1.5 rounded-full ${
+                    gameFilter === filter.key
+                      ? "bg-accent-primary"
+                      : "bg-bg-card border border-neutral-800"
+                  }`}
+                  onPress={() => setGameFilter(filter.key)}
+                >
+                  <Text
+                    className={`text-xs font-semibold ${
+                      gameFilter === filter.key ? "text-text-primary" : "text-text-muted"
+                    }`}
+                  >
+                    {filter.label}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
           )}
         </View>
 
-        {/* Tabs */}
-        <View className="flex-row bg-bg-card rounded-xl border border-neutral-800 p-1">
-          <Pressable
-            className={`flex-1 py-2 rounded-lg items-center ${activeTab === "rooms" ? "bg-bg-secondary" : ""}`}
-            onPress={() => setActiveTab("rooms")}
-          >
-            <Text
-              className={`font-semibold text-sm ${activeTab === "rooms" ? "text-text-primary" : "text-text-muted"}`}
+        {/* Content */}
+        {activeTab === "rooms" ? (
+          <FlatList
+            data={filteredRooms}
+            keyExtractor={(item) => item.id}
+            renderItem={renderRoom}
+            contentContainerClassName="px-6 pb-6 gap-3"
+            ListEmptyComponent={
+              <View className="items-center py-12">
+                <Text className="text-text-muted text-base mb-2">No rooms yet</Text>
+                <Text className="text-text-muted text-sm">
+                  {isGuest ? "Join a room to start playing!" : "Create one to start playing!"}
+                </Text>
+              </View>
+            }
+          />
+        ) : (
+          <ChatPanel messages={chatMessages} onSend={sendChat} myUserId={user?.id || ""} />
+        )}
+
+        {/* Support footer */}
+        <View className="items-center pb-5 pt-2 px-6">
+          <Text className="text-text-muted text-xs mb-2">Support is always appreciated</Text>
+          <View className="flex-row items-center gap-3">
+            <Pressable
+              onPress={() => Linking.openURL(STRIPE_DONATE_URL)}
+              className="flex-row items-center gap-1.5 bg-bg-card border border-neutral-800 px-3 py-1.5 rounded-full active:opacity-70"
+              hitSlop={8}
             >
-              Rooms ({filteredRooms.length})
-            </Text>
-          </Pressable>
-          <Pressable
-            className={`flex-1 py-2 rounded-lg items-center ${activeTab === "chat" ? "bg-bg-secondary" : ""}`}
-            onPress={() => setActiveTab("chat")}
-          >
-            <Text
-              className={`font-semibold text-sm ${activeTab === "chat" ? "text-text-primary" : "text-text-muted"}`}
-            >
-              Lobby Chat
-            </Text>
-          </Pressable>
+              <View className="w-4 h-4 rounded-full items-center justify-center bg-[#635bff]">
+                <Text className="text-white text-[7px] font-bold">S</Text>
+              </View>
+              <Text className="text-text-muted text-xs">Tip</Text>
+            </Pressable>
+            <CryptoDonations />
+          </View>
         </View>
 
-        {/* Game filter tabs */}
-        {activeTab === "rooms" && (
-          <View className="flex-row gap-2 mt-3">
-            {(
-              [
-                { key: "all", label: "All" },
-                { key: "tic_tac_toe", label: "Tic-Tac-Toe" },
-                { key: "chess", label: "Chess" },
-              ] as const
-            ).map((filter) => (
-              <Pressable
-                key={filter.key}
-                className={`px-3 py-1.5 rounded-full ${
-                  gameFilter === filter.key
-                    ? "bg-accent-primary"
-                    : "bg-bg-card border border-neutral-800"
-                }`}
-                onPress={() => setGameFilter(filter.key)}
-              >
-                <Text
-                  className={`text-xs font-semibold ${
-                    gameFilter === filter.key ? "text-text-primary" : "text-text-muted"
-                  }`}
-                >
-                  {filter.label}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
+        {/* Modals */}
+        <CreateRoomModal
+          visible={showCreateModal}
+          onClose={() => setShowCreateModal(false)}
+          onCreate={handleCreateRoom}
+          isLoading={isCreating}
+        />
+
+        {passwordRoom && (
+          <PasswordModal
+            visible={!!passwordRoom}
+            roomName={passwordRoom.name}
+            onClose={() => setPasswordRoom(null)}
+            onSubmit={handlePasswordSubmit}
+            isLoading={isJoining}
+            error={passwordError}
+          />
         )}
       </View>
-
-      {/* Content */}
-      {activeTab === "rooms" ? (
-        <FlatList
-          data={filteredRooms}
-          keyExtractor={(item) => item.id}
-          renderItem={renderRoom}
-          contentContainerClassName="px-6 pb-6 gap-3"
-          ListEmptyComponent={
-            <View className="items-center py-12">
-              <Text className="text-text-muted text-base mb-2">No rooms yet</Text>
-              <Text className="text-text-muted text-sm">
-                {isGuest ? "Join a room to start playing!" : "Create one to start playing!"}
-              </Text>
-            </View>
-          }
-        />
-      ) : (
-        <ChatPanel messages={chatMessages} onSend={sendChat} myUserId={user?.id || ""} />
-      )}
-
-      {/* Support footer */}
-      <View className="items-center pb-5 pt-2 px-6">
-        <Text className="text-text-muted text-xs mb-2">Support is always appreciated</Text>
-        <View className="flex-row items-center gap-3">
-          <Pressable
-            onPress={() => Linking.openURL(STRIPE_DONATE_URL)}
-            className="flex-row items-center gap-1.5 bg-bg-card border border-neutral-800 px-3 py-1.5 rounded-full active:opacity-70"
-            hitSlop={8}
-          >
-            <View className="w-4 h-4 rounded-full items-center justify-center bg-[#635bff]">
-              <Text className="text-white text-[7px] font-bold">S</Text>
-            </View>
-            <Text className="text-text-muted text-xs">Tip</Text>
-          </Pressable>
-          <CryptoDonations />
-        </View>
-      </View>
-
-      {/* Modals */}
-      <CreateRoomModal
-        visible={showCreateModal}
-        onClose={() => setShowCreateModal(false)}
-        onCreate={handleCreateRoom}
-        isLoading={isCreating}
-      />
-
-      {passwordRoom && (
-        <PasswordModal
-          visible={!!passwordRoom}
-          roomName={passwordRoom.name}
-          onClose={() => setPasswordRoom(null)}
-          onSubmit={handlePasswordSubmit}
-          isLoading={isJoining}
-          error={passwordError}
-        />
-      )}
     </View>
   );
 }
