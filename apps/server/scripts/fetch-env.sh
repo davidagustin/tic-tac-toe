@@ -44,6 +44,8 @@ mapping = {
     'oauth/google-client-id': 'GOOGLE_CLIENT_ID',
     'oauth/google-client-secret': 'GOOGLE_CLIENT_SECRET',
     'oauth/google-callback-url': 'GOOGLE_CALLBACK_URL',
+    'email/resend-api-key': 'RESEND_API_KEY',
+    'email/from-email': 'FROM_EMAIL',
 }
 
 prefix = '${PREFIX}'
