@@ -129,9 +129,18 @@ jobs:
             # Restart services with new images
             docker-compose -f docker-compose.prod.yml up -d --remove-orphans
 
-            # Run database migrations (wait for postgres health check)
-            sleep 10
-            docker exec ttt-app node /app/node_modules/prisma/build/index.js migrate deploy
+            # Wait for app container to stabilize, check it's alive
+            sleep 15
+            echo "=== Container status ==="
+            docker ps -a --format "table {{.Names}}\t{{.Status}}"
+            echo "=== App container logs ==="
+            docker-compose -f docker-compose.prod.yml logs app --tail 20
+            echo "=== Memory usage ==="
+            free -m
+            echo "========================"
+
+            # Run database migrations with limited memory
+            docker exec ttt-app node --max-old-space-size=128 /app/node_modules/prisma/build/index.js migrate deploy
 
             # Clear stale lobby chat from Redis
             source ~/app/.env
