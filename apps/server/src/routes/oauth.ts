@@ -183,6 +183,35 @@ export async function oauthRoutes(app: FastifyInstance) {
         .status(401)
         .send({ success: false, error: "Invalid or expired authorization code" });
     }
+
+    const isProduction = process.env.NODE_ENV === "production";
+
+    // Set httpOnly cookies so the web client can authenticate subsequent requests
+    reply.setCookie("refreshToken", tokens.refreshToken, {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: "lax",
+      path: "/api/auth",
+      maxAge: 7 * 24 * 60 * 60, // 7 days
+    });
+
+    reply.setCookie("accessToken", tokens.accessToken, {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: "lax",
+      path: "/api",
+      maxAge: 15 * 60, // 15 minutes
+    });
+
+    const csrfToken = crypto.randomBytes(32).toString("hex");
+    reply.setCookie("csrfToken", csrfToken, {
+      httpOnly: false,
+      secure: isProduction,
+      sameSite: "lax",
+      path: "/",
+      maxAge: 15 * 60,
+    });
+
     return reply.send({
       success: true,
       data: { accessToken: tokens.accessToken, refreshToken: tokens.refreshToken },
