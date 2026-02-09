@@ -57,7 +57,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   loginAsGuest: () => {
-    const guestId = `guest_${Date.now()}`;
+    const guestId = `guest_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
     set({
       user: {
         id: guestId,

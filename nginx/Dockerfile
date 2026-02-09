@@ -26,3 +26,7 @@ RUN npx expo export --platform web
 FROM nginx:alpine
 
 COPY --from=web-builder /app/apps/mobile/dist /var/www/web
+
+# Note: Running as non-root (USER nginx) is not possible here because
+# nginx listens on privileged ports 80/443. Would require switching to
+# high ports (8080/8443) and updating docker-compose port mappings.

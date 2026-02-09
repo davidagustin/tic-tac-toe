@@ -25,7 +25,11 @@ export async function sendMessage(
     id: nanoid(12),
     userId,
     userName,
-    text: text.trim(),
+    text: text
+      .trim()
+      .replace(/<[^>]*>/g, "")
+      // biome-ignore lint/suspicious/noControlCharactersInRegex: intentional sanitization of control characters
+      .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, ""),
     timestamp: new Date().toISOString(),
     channel,
   };

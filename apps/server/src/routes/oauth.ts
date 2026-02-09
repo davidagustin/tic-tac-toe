@@ -3,31 +3,22 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { OAuth2Client } from "google-auth-library";
 import { config } from "../lib/config";
 import { prisma } from "../lib/prisma";
+import { getRedis } from "../lib/redis";
 import { createRefreshToken } from "../services/auth";
 
-// Temporary auth codes for OAuth exchange (60s TTL)
-const authCodes = new Map<
-  string,
-  { accessToken: string; refreshToken: string; expiresAt: number }
->();
-
-// CSRF state parameters for OAuth flow (5 min TTL)
-const oauthStates = new Map<string, number>();
-
-function generateAuthCode(accessToken: string, refreshToken: string): string {
+async function generateAuthCode(accessToken: string, refreshToken: string): Promise<string> {
   const code = crypto.randomBytes(32).toString("hex");
-  authCodes.set(code, { accessToken, refreshToken, expiresAt: Date.now() + 60_000 });
+  const redis = getRedis();
+  await redis.set(`oauth_code:${code}`, JSON.stringify({ accessToken, refreshToken }), "EX", 60);
   return code;
 }
 
-function consumeAuthCode(code: string) {
-  const entry = authCodes.get(code);
-  if (!entry || entry.expiresAt < Date.now()) {
-    authCodes.delete(code);
-    return null;
-  }
-  authCodes.delete(code);
-  return entry;
+async function consumeAuthCode(code: string) {
+  const redis = getRedis();
+  const raw = await redis.get(`oauth_code:${code}`);
+  if (!raw) return null;
+  await redis.del(`oauth_code:${code}`);
+  return JSON.parse(raw) as { accessToken: string; refreshToken: string };
 }
 
 export async function oauthRoutes(app: FastifyInstance) {
@@ -43,7 +34,8 @@ export async function oauthRoutes(app: FastifyInstance) {
     const randomToken = crypto.randomBytes(32).toString("hex");
     // Encode platform in state so the callback knows where to redirect
     const state = platform === "web" ? `${randomToken}|web` : randomToken;
-    oauthStates.set(state, Date.now() + 5 * 60 * 1000); // 5 min TTL
+    const redis = getRedis();
+    await redis.set(`oauth_state:${state}`, String(Date.now()), "EX", 300);
 
     const url = googleClient.generateAuthUrl({
       access_type: "offline",
@@ -66,18 +58,14 @@ export async function oauthRoutes(app: FastifyInstance) {
     // Validate CSRF state parameter and detect platform
     const isWeb = state?.endsWith("|web");
 
-    if (!state || !oauthStates.has(state)) {
+    const redis = getRedis();
+    const stateValue = state ? await redis.get(`oauth_state:${state}`) : null;
+    if (!state || !stateValue) {
       return reply
         .status(403)
         .send({ success: false, error: "Invalid or missing state parameter" });
     }
-
-    const stateExpiry = oauthStates.get(state)!;
-    oauthStates.delete(state);
-
-    if (stateExpiry < Date.now()) {
-      return reply.status(403).send({ success: false, error: "State parameter expired" });
-    }
+    await redis.del(`oauth_state:${state}`);
 
     try {
       // Exchange code for tokens (use a new client instance to avoid race conditions)
@@ -168,13 +156,11 @@ export async function oauthRoutes(app: FastifyInstance) {
       const refreshToken = await createRefreshToken(user.id);
 
       // Redirect with temporary auth code (60s TTL)
-      const code = generateAuthCode(accessToken, refreshToken);
+      const code = await generateAuthCode(accessToken, refreshToken);
 
       if (isWeb) {
-        // Web: redirect to the web app's callback page
-        const proto = request.headers["x-forwarded-proto"] || "https";
-        const host = request.headers.host || request.hostname;
-        return reply.redirect(`${proto}://${host}/auth/callback?code=${code}`);
+        const appHost = process.env.APP_HOST || "game-practice-aws.com";
+        return reply.redirect(`https://${appHost}/auth/callback?code=${code}`);
       }
 
       // Mobile: deep link back to Expo app
@@ -191,7 +177,7 @@ export async function oauthRoutes(app: FastifyInstance) {
     if (!code) {
       return reply.status(400).send({ success: false, error: "Authorization code required" });
     }
-    const tokens = consumeAuthCode(code);
+    const tokens = await consumeAuthCode(code);
     if (!tokens) {
       return reply
         .status(401)

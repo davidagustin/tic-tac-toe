@@ -64,7 +64,7 @@ export function useLobby() {
 
         connectedRef.current = true;
       } catch (err) {
-        console.error("[useLobby] Connection failed:", err);
+        if (__DEV__) console.error("[useLobby] Connection failed:", err);
       }
     }
 

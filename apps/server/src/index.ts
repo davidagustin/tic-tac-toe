@@ -10,6 +10,7 @@ import socketioPlugin from "./plugins/socketio";
 import { authRoutes } from "./routes/auth";
 import { healthRoutes } from "./routes/health";
 import { oauthRoutes } from "./routes/oauth";
+import { cleanupExpiredTokens } from "./services/auth";
 import { chessEngine } from "./services/engines/chessEngine";
 import { registerEngine } from "./services/engines/registry";
 import { tttEngine } from "./services/engines/tttEngine";
@@ -84,6 +85,13 @@ async function main() {
     app.log.info(`Server running at http://localhost:${config.PORT}`);
     app.log.info(`Health: http://localhost:${config.PORT}/api/health`);
     app.log.info(`Socket.IO path: /api/socket.io/`);
+
+    setInterval(
+      () => {
+        cleanupExpiredTokens().catch((err) => app.log.error(err, "Token cleanup failed"));
+      },
+      60 * 60 * 1000,
+    );
   } catch (err) {
     app.log.error(err);
     process.exit(1);

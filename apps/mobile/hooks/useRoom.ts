@@ -79,7 +79,7 @@ export function useRoom(roomId: string) {
     // (where the earlier room:state event was missed) and reconnects
     socket.emit("room:join", { roomId }, (res: { success: boolean; error?: string }) => {
       if (!res.success) {
-        console.error("[useRoom] Join/rejoin failed:", res.error);
+        if (__DEV__) console.error("[useRoom] Join/rejoin failed:", res.error);
       }
     });
 

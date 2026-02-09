@@ -278,6 +278,9 @@ export interface ServerToClientEvents {
   "game:rematch_offered": (data: { userId: string }) => void;
   "game:rematch_start": (state: OnlineGameState) => void;
 
+  // Auth
+  "auth:guest-id": (guestId: string) => void;
+
   // Errors
   error: (data: { message: string; code: string }) => void;
 }

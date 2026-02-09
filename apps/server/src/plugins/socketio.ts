@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { createAdapter } from "@socket.io/redis-adapter";
 import type { ClientToServerEvents, ServerToClientEvents } from "@ttt/shared";
 import type { FastifyInstance } from "fastify";
@@ -37,15 +38,22 @@ async function socketioPlugin(app: FastifyInstance) {
   // Auth middleware — verify JWT or accept guest tokens
   io.use((socket, next) => {
     const token = socket.handshake.auth.token as string | undefined;
-    const guestId = socket.handshake.auth.guestId as string | undefined;
     const guestName = socket.handshake.auth.guestName as string | undefined;
 
-    if (guestId && guestName) {
-      // Guest connection
-      socket.data.userId = guestId;
-      socket.data.userName = guestName;
+    if (guestName !== undefined) {
+      const serverGuestId = `guest_${crypto.randomUUID()}`;
+      let sanitized = String(guestName)
+        .trim()
+        .replace(/<[^>]*>/g, "")
+        .slice(0, 20);
+      if (!sanitized) {
+        sanitized = `Guest_${Math.floor(Math.random() * 9999)}`;
+      }
+      socket.data.userId = serverGuestId;
+      socket.data.userName = sanitized;
       socket.data.isGuest = true;
       socket.data.rating = 1000;
+      socket.emit("auth:guest-id", serverGuestId);
       return next();
     }
 

@@ -66,7 +66,7 @@ export async function cleanupExpiredTokens(): Promise<number> {
 const RESET_CODE_TTL = 600; // 10 minutes
 
 export async function generateResetCode(email: string): Promise<string> {
-  const code = Math.floor(100000 + Math.random() * 900000).toString();
+  const code = crypto.randomInt(100000, 999999).toString();
   const redis = getRedis();
   const key = `${REDIS_KEYS.PASSWORD_RESET}${email.toLowerCase()}`;
   await redis.set(key, code, "EX", RESET_CODE_TTL);
@@ -75,10 +75,30 @@ export async function generateResetCode(email: string): Promise<string> {
 
 export async function validateResetCode(email: string, code: string): Promise<boolean> {
   const redis = getRedis();
-  const key = `${REDIS_KEYS.PASSWORD_RESET}${email.toLowerCase()}`;
+  const normalizedEmail = email.toLowerCase();
+  const key = `${REDIS_KEYS.PASSWORD_RESET}${normalizedEmail}`;
+  const attemptsKey = `reset_attempts:${normalizedEmail}`;
+
+  const attempts = await redis.get(attemptsKey);
+  if (attempts && Number.parseInt(attempts, 10) >= 5) {
+    await redis.del(key);
+    return false;
+  }
+
   const stored = await redis.get(key);
-  if (!stored || stored !== code) return false;
+  if (!stored || stored.length !== code.length) {
+    await redis.incr(attemptsKey);
+    await redis.expire(attemptsKey, 600);
+    return false;
+  }
+  if (!crypto.timingSafeEqual(Buffer.from(stored), Buffer.from(code))) {
+    await redis.incr(attemptsKey);
+    await redis.expire(attemptsKey, 600);
+    return false;
+  }
+
   await redis.del(key);
+  await redis.del(attemptsKey);
   return true;
 }
 

@@ -4,6 +4,7 @@ services:
     container_name: ttt-app
     restart: unless-stopped
     env_file: .env
+    networks: [backend]
     depends_on:
       postgres:
         condition: service_healthy
@@ -20,6 +21,7 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-ttt_db}
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    networks: [backend]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ttt_user -d ttt_db"]
       interval: 5s
@@ -32,9 +34,10 @@ services:
     restart: unless-stopped
     volumes:
       - redis_data:/data
+    networks: [backend]
     command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      test: ["CMD-SHELL", "REDISCLI_AUTH=$$REDIS_PASSWORD redis-cli ping"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -51,8 +54,13 @@ services:
       - /etc/letsencrypt/live/game-practice-aws.com/fullchain.pem:/etc/nginx/ssl/fullchain.pem:ro
       - /etc/letsencrypt/live/game-practice-aws.com/privkey.pem:/etc/nginx/ssl/privkey.pem:ro
       - certbot_webroot:/var/www/certbot:ro
+    networks: [frontend, backend]
     depends_on:
       - app
+
+networks:
+  frontend:
+  backend:
 
 volumes:
   postgres_data:
