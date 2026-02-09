@@ -39,10 +39,21 @@ COPY packages/shared/package.json ./packages/shared/
 
 RUN npm ci --omit=dev
 
+# Stage system libraries that Prisma's native engine needs at runtime
+# (DHI runtime images strip these out)
+RUN mkdir -p /tmp/prisma-libs && \
+    cp -L /usr/lib/*/libz.so.1 /tmp/prisma-libs/ 2>/dev/null; \
+    cp -L /usr/lib/*/libssl.so.3 /tmp/prisma-libs/ 2>/dev/null; \
+    cp -L /usr/lib/*/libcrypto.so.3 /tmp/prisma-libs/ 2>/dev/null; \
+    ls -la /tmp/prisma-libs/
+
 # ── Production Stage ────────────────────────────────
 FROM dhi.io/node:25-debian13 AS runner
 
 WORKDIR /app
+
+# Install system libraries required by Prisma query engine
+COPY --from=proddeps /tmp/prisma-libs/ /usr/lib/
 
 # Copy production node_modules (includes prisma CLI + @prisma/client)
 COPY --from=proddeps /app/node_modules ./node_modules
