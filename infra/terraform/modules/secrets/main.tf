@@ -51,6 +51,7 @@ resource "aws_ssm_parameter" "postgres_password" {
   type  = "SecureString"
   value = random_password.postgres.result
   tags  = { Project = var.project_name }
+  lifecycle { ignore_changes = [value] }
 }
 
 resource "aws_ssm_parameter" "postgres_db" {
@@ -65,6 +66,7 @@ resource "aws_ssm_parameter" "database_url" {
   type  = "SecureString"
   value = "postgresql://ttt_user:${random_password.postgres.result}@postgres:5432/ttt_db"
   tags  = { Project = var.project_name }
+  lifecycle { ignore_changes = [value] }
 }
 
 # Redis
@@ -73,6 +75,7 @@ resource "aws_ssm_parameter" "redis_password" {
   type  = "SecureString"
   value = random_password.redis.result
   tags  = { Project = var.project_name }
+  lifecycle { ignore_changes = [value] }
 }
 
 resource "aws_ssm_parameter" "redis_url" {
@@ -80,6 +83,7 @@ resource "aws_ssm_parameter" "redis_url" {
   type  = "SecureString"
   value = "redis://:${random_password.redis.result}@redis:6379"
   tags  = { Project = var.project_name }
+  lifecycle { ignore_changes = [value] }
 }
 
 # JWT
@@ -88,6 +92,7 @@ resource "aws_ssm_parameter" "jwt_access_secret" {
   type  = "SecureString"
   value = random_password.jwt_access.result
   tags  = { Project = var.project_name }
+  lifecycle { ignore_changes = [value] }
 }
 
 resource "aws_ssm_parameter" "jwt_refresh_secret" {
@@ -95,6 +100,7 @@ resource "aws_ssm_parameter" "jwt_refresh_secret" {
   type  = "SecureString"
   value = random_password.jwt_refresh.result
   tags  = { Project = var.project_name }
+  lifecycle { ignore_changes = [value] }
 }
 
 # App config (non-sensitive)
@@ -140,6 +146,10 @@ resource "aws_ssm_parameter" "google_callback_url" {
   type  = "String"
   value = "https://api.yourdomain.com/api/auth/google/callback"
   tags  = { Project = var.project_name }
+
+  lifecycle {
+    ignore_changes = [value]
+  }
 }
 
 # ─── IAM Policy for Reading Secrets ───────────────
